@@ -1,0 +1,271 @@
+import React, { useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { AppContext } from "../App";
+import {
+  Gamepad2,
+  Eye,
+  EyeOff,
+  User,
+  Crown,
+} from "lucide-react";
+import { toast } from "sonner";
+
+export function LoginScreen() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginType, setLoginType] = useState<
+    "regular" | "member"
+  >("regular");
+  const [selectedCafe, setSelectedCafe] = useState("");
+  const navigate = useNavigate();
+  const context = useContext(AppContext);
+
+  const handleLogin = () => {
+    if (!username || !password) {
+      toast.error("Mohon isi semua kolom");
+      return;
+    }
+
+    // Check if member login requires cafe selection
+    if (loginType === "member" && !selectedCafe) {
+      toast.error("Mohon pilih warnet");
+      return;
+    }
+
+    // Try to find user in registered users with credentials
+    const user = context?.findUserByCredentials(username, password, loginType);
+
+    if (user) {
+      // For member login, verify the selected cafe
+      if (loginType === "member") {
+        const hasCafeAccess = user.cafeWallets?.some(
+          (wallet) => wallet.cafeId === selectedCafe,
+        );
+        if (!hasCafeAccess) {
+          toast.error(
+            "Anda bukan member warnet ini",
+          );
+          return;
+        }
+        toast.success(
+          `Login berhasil! Selamat datang di ${user.cafeWallets?.find((w) => w.cafeId === selectedCafe)?.cafeName}`,
+        );
+      } else {
+        toast.success("Login berhasil! Selamat datang di Bowar.");
+      }
+
+      context?.setUser(user);
+      navigate("/home");
+    } else {
+      toast.error("Username atau password salah");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Logo Container with Glow */}
+        <div className="flex flex-col items-center mb-10">
+          <div className="relative mb-6">
+            {/* Glow effect */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 rounded-3xl blur-2xl opacity-50 animate-pulse" />
+
+            {/* Logo */}
+            <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 border border-blue-500/30 rounded-3xl p-6 backdrop-blur-xl">
+              <Gamepad2 className="w-16 h-16 text-blue-400" />
+            </div>
+          </div>
+
+          {/* App Name & Tagline */}
+          <h1 className="text-slate-100 text-4xl mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-teal-400 bg-clip-text text-transparent">
+            Bowar
+          </h1>
+          <p className="text-teal-400 text-sm tracking-wider mb-1">
+            Booking Warnet
+          </p>
+          <p className="text-slate-400 text-sm text-center max-w-xs">
+            Masuk untuk memulai sesi gaming warnet Anda
+          </p>
+        </div>
+
+        {/* Login Card */}
+        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8 shadow-2xl shadow-blue-500/5">
+          <div className="space-y-5">
+            {/* Login Type Selector */}
+            <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-1.5 grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => {
+                  setLoginType("regular");
+                  setSelectedCafe("");
+                }}
+                className={`flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${
+                  loginType === "regular"
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg shadow-blue-500/30"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span className="text-sm">Regular</span>
+              </button>
+              <button
+                onClick={() => setLoginType("member")}
+                className={`flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${
+                  loginType === "member"
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg shadow-blue-500/30"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+              >
+                <Crown className="w-4 h-4" />
+                <span className="text-sm">Member</span>
+              </button>
+            </div>
+
+            {/* Member Cafe Selection */}
+            {loginType === "member" && (
+              <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-2xl p-4">
+                <label className="block text-blue-300 text-sm mb-2">
+                  Pilih Warnet
+                </label>
+                <select
+                  value={selectedCafe}
+                  onChange={(e) =>
+                    setSelectedCafe(e.target.value)
+                  }
+                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                >
+                  <option value="">Pilih warnet Anda</option>
+                  {context?.cafes.map((cafe) => (
+                    <option key={cafe.id} value={cafe.id}>
+                      {cafe.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Username Input */}
+            <div>
+              <label className="block text-slate-300 text-sm mb-2">
+                Username
+              </label>
+              <input
+                type="text"
+                placeholder="Masukkan username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onKeyPress={(e) =>
+                  e.key === "Enter" && handleLogin()
+                }
+                className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              />
+            </div>
+
+            {/* Password Input */}
+            <div>
+              <label className="block text-slate-300 text-sm mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Masukkan password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyPress={(e) =>
+                    e.key === "Enter" && handleLogin()
+                  }
+                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-400 transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Forgot Password Link */}
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() =>
+                  toast.info(
+                    "Fitur reset password segera hadir!",
+                  )
+                }
+                className="text-teal-400 text-sm hover:text-teal-300 transition-colors"
+              >
+                Lupa Password?
+              </button>
+            </div>
+
+            {/* Login Button */}
+            <button
+              onClick={handleLogin}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              MASUK {loginType === "member" ? "SEBAGAI MEMBER" : ""}
+            </button>
+
+            {/* Register Link */}
+            <div className="text-center pt-4 border-t border-slate-800/50">
+              <p className="text-slate-400 text-sm mb-3">
+                Belum punya akun?
+              </p>
+              <button
+                onClick={() => navigate("/register")}
+                className="text-teal-400 hover:text-teal-300 transition-colors"
+              >
+                Buat Akun
+              </button>
+            </div>
+
+            {/* Operator Login Link */}
+            <div className="text-center pt-4 border-t border-slate-800/50 mt-4">
+              <p className="text-slate-400 text-sm mb-3">
+                Apakah Anda operator warnet?
+              </p>
+              <button
+                onClick={() => navigate("/operator/login")}
+                className="text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-2 mx-auto"
+              >
+                <Crown className="w-4 h-4" />
+                <span>Login Operator</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Test Credentials */}
+        <div className="mt-6 bg-slate-900/30 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-4">
+          <p className="text-slate-400 text-xs text-center mb-2">
+            Kredensial Testing:
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-slate-800/50 rounded-xl p-2 text-center">
+              <p className="text-slate-500">Regular:</p>
+              <p className="text-teal-400">regular</p>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-2 text-center">
+              <p className="text-slate-500">Member:</p>
+              <p className="text-teal-400">member</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
