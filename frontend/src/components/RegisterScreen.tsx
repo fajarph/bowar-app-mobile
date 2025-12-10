@@ -1,8 +1,16 @@
-import { useState, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppContext, type User, type CafeWallet } from '../App';
+// import { AppContext, type User, type CafeWallet } from '../App';
 import { ArrowLeft, User as UserIcon, Crown, Check, MapPin, Clock, Award, ShieldCheck, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { registerUser, registerMember, getWarnets } from '../services/api';
+
+interface Warnet {
+  id: number;
+  name: string;
+  address: string;
+  description: string | null;
+}
 
 export function RegisterScreen() {
   const [step, setStep] = useState<'role' | 'form'>('role');
@@ -11,15 +19,39 @@ export function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selectedCafe, setSelectedCafe] = useState('');
+  const [warnets, setWarnets] = useState<Warnet[]>([]);
+  const [loadingWarnets, setLoadingWarnets] = useState(false);
   const navigate = useNavigate();
-  const context = useContext(AppContext);
+  // const context = useContext(AppContext);
+
+  // Fetch warnets from backend
+  useEffect(() => {
+    const fetchWarnets = async () => {
+      if (selectedRole === 'member') {
+        setLoadingWarnets(true);
+        try {
+          const response = await getWarnets();
+          if (response.data) {
+            setWarnets(response.data);
+          }
+        } catch (error) {
+          console.error('Error fetching warnets:', error);
+          toast.error('Gagal memuat daftar warnet');
+        } finally {
+          setLoadingWarnets(false);
+        }
+      }
+    };
+
+    fetchWarnets();
+  }, [selectedRole]);
 
   const handleRoleSelect = (role: 'regular' | 'member') => {
     setSelectedRole(role);
     setStep('form');
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!username || !email || !password) {
       toast.error('Mohon isi semua kolom');
       return;
@@ -30,65 +62,54 @@ export function RegisterScreen() {
       return;
     }
 
-    // Check if username already exists
-    const userExists = context?.users.find((u: User) => u.username === username);
-    if (userExists) {
-      toast.error('Username sudah digunakan. Silakan pilih yang lain.');
-      return;
-    }
+    try {
+      let response;
 
-    // For member registration, check if this email is already a member at this specific cafe
-    if (selectedRole === 'member') {
-      const existingMemberAtCafe = context?.users.find(
-        (u: User) => 
-          u.email === email && 
-          u.role === 'member' && 
-          u.cafeWallets?.some((w: CafeWallet) => w.cafeId === selectedCafe)
-      );
-      
-      if (existingMemberAtCafe) {
-        toast.error('Email ini sudah terdaftar sebagai member di warnet ini. Silakan gunakan email lain atau pilih warnet lain.');
-        return;
+      if (selectedRole === 'member') {
+        // Convert warnet ID to number (from backend, ID is already number)
+        const warnetId = parseInt(selectedCafe);
+        if (isNaN(warnetId) || !selectedCafe) {
+          toast.error('ID warnet tidak valid. Silakan pilih warnet yang valid.');
+          return;
+        }
+
+        // Call backend API for member registration
+        response = await registerMember({
+          username,
+          email,
+          password,
+          warnet_id: warnetId,
+        });
+      } else {
+        // Call backend API for regular user registration
+        response = await registerUser({
+          username,
+          email,
+          password,
+        });
       }
+
+      // Success response from backend
+      if (response.message) {
+        if (selectedRole === 'member') {
+          toast.success('🎉 Registrasi berhasil!');
+          toast.success('⭐ Membership diaktifkan!');
+          toast.info('Silakan login dengan kredensial Anda');
+        } else {
+          toast.success('🎉 Registrasi berhasil!');
+          toast.info('Silakan login dengan kredensial Anda');
+        }
+
+        // Redirect to login page after successful registration
+        setTimeout(() => {
+          navigate('/login');
+        }, 1500);
+      }
+    } catch (error: unknown) {
+      // Handle API errors
+      const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || (error as { message?: string })?.message || 'Terjadi kesalahan saat mendaftar';
+      toast.error(errorMessage);
     }
-
-    const newUser: User = {
-      id: Date.now().toString(),
-      username,
-      email,
-      password, // Store password for authentication
-      role: selectedRole!,
-      credits: 0,
-      cafeWallets:
-        selectedRole === 'member'
-          ? [
-              {
-                cafeId: selectedCafe,
-                cafeName: context?.cafes.find((c) => c.id === selectedCafe)?.name || '',
-                remainingMinutes: 0,
-                isActive: false,
-                lastUpdated: Date.now(),
-              },
-            ]
-          : undefined,
-    };
-
-    // Register the user (do NOT auto-login)
-    context?.registerUser(newUser);
-    
-    if (selectedRole === 'member') {
-      toast.success('🎉 Registrasi berhasil!');
-      toast.success('⭐ Membership diaktifkan!');
-      toast.info('Silakan login dengan kredensial Anda');
-    } else {
-      toast.success('🎉 Registrasi berhasil!');
-      toast.info('Silakan login dengan kredensial Anda');
-    }
-
-    // Redirect to login page after successful registration
-    setTimeout(() => {
-      navigate('/login');
-    }, 1500);
   };
 
   if (step === 'role') {
@@ -278,12 +299,15 @@ export function RegisterScreen() {
                 <select
                   value={selectedCafe}
                   onChange={(e) => setSelectedCafe(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  disabled={loadingWarnets}
+                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="">Pilih warnet</option>
-                  {context?.cafes.map((cafe) => (
-                    <option key={cafe.id} value={cafe.id}>
-                      {cafe.name}
+                  <option value="">
+                    {loadingWarnets ? 'Memuat warnet...' : 'Pilih warnet'}
+                  </option>
+                  {warnets.map((warnet) => (
+                    <option key={warnet.id} value={warnet.id.toString()}>
+                      {warnet.name}
                     </option>
                   ))}
                 </select>
