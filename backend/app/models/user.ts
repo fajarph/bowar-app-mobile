@@ -11,7 +11,7 @@ import Booking from './booking.js'
 import Payment from './payment.js'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
-  uids: ['email'],
+  uids: ['email', 'username'],
   passwordColumnName: 'password',
 })
 

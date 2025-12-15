@@ -10,8 +10,8 @@
 import router from '@adonisjs/core/services/router'
 
 const RegisterController = () => import('../app/controllers/auth/register_controller.js')
-const LoginController = () => import('#controllers/auth/loginController')
-const WarnetController = () => import('#controllers/warnetController')
+const LoginController = () => import('../app/controllers/auth/login_controller.js')
+const WarnetController = () => import('../app/controllers/warnetController.js')
 
 router.get('/', async () => {
   return {
