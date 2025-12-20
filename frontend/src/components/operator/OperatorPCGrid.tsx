@@ -1,7 +1,7 @@
-import React, { useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
-import { Monitor, User, LogIn, LogOut, Clock, Crown, Search, Filter } from 'lucide-react';
+import { Monitor, User, LogIn, LogOut, Clock, Crown, Search } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { toast } from 'sonner';
@@ -85,10 +85,11 @@ export function OperatorPCGrid() {
       date: new Date().toISOString(),
       time: new Date().toTimeString().slice(0, 5),
       duration: Math.floor(memberWallet.remainingMinutes / 60), // Convert to hours
-      totalPrice: 0, // No charge, using stored time
       status: 'active' as const,
-      isPaid: true,
-      loginTime: Date.now(),
+      paymentStatus: 'paid' as const,
+      bookedAt: Date.now(),
+      sessionStartTime: Date.now(),
+      isSessionActive: true,
     };
 
     context?.addBooking(newBooking);
@@ -113,8 +114,8 @@ export function OperatorPCGrid() {
     if (!memberWallet) return;
 
     // Calculate time used (in minutes)
-    const loginTime = pcStatus.booking?.loginTime || Date.now();
-    const timeUsed = Math.floor((Date.now() - loginTime) / 60000); // Convert ms to minutes
+    const sessionStartTime = pcStatus.booking?.sessionStartTime || Date.now();
+    const timeUsed = Math.floor((Date.now() - sessionStartTime) / 60000); // Convert ms to minutes
 
     // Deduct time from wallet
     const newRemainingMinutes = Math.max(0, memberWallet.remainingMinutes - timeUsed);

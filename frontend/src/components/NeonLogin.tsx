@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Eye, EyeOff, Zap, Lock, Mail } from 'lucide-react';
 
 export function NeonLogin() {

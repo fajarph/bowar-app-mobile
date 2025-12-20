@@ -30,9 +30,11 @@ export function RegisterScreen() {
       if (selectedRole === 'member') {
         setLoadingWarnets(true);
         try {
-          const response = await getWarnets();
-          if (response.data) {
-            setWarnets(response.data);
+          const warnetsData = await getWarnets();
+          if (Array.isArray(warnetsData)) {
+            setWarnets(warnetsData);
+          } else {
+            setWarnets([]);
           }
         } catch (error) {
           console.error('Error fetching warnets:', error);
@@ -70,8 +72,8 @@ export function RegisterScreen() {
         const warnetId = parseInt(selectedCafe);
         if (isNaN(warnetId) || !selectedCafe) {
           toast.error('ID warnet tidak valid. Silakan pilih warnet yang valid.');
-          return;
-        }
+      return;
+    }
 
         // Call backend API for member registration
         response = await registerMember({
@@ -83,32 +85,60 @@ export function RegisterScreen() {
       } else {
         // Call backend API for regular user registration
         response = await registerUser({
-          username,
-          email,
+      username,
+      email,
           password,
         });
       }
 
       // Success response from backend
       if (response.message) {
-        if (selectedRole === 'member') {
-          toast.success('🎉 Registrasi berhasil!');
-          toast.success('⭐ Membership diaktifkan!');
-          toast.info('Silakan login dengan kredensial Anda');
-        } else {
-          toast.success('🎉 Registrasi berhasil!');
-          toast.info('Silakan login dengan kredensial Anda');
-        }
+    if (selectedRole === 'member') {
+      toast.success('🎉 Registrasi berhasil!');
+      toast.success('⭐ Membership diaktifkan!');
+      toast.info('Silakan login dengan kredensial Anda');
+    } else {
+      toast.success('🎉 Registrasi berhasil!');
+      toast.info('Silakan login dengan kredensial Anda');
+    }
 
-        // Redirect to login page after successful registration
-        setTimeout(() => {
-          navigate('/login');
-        }, 1500);
+    // Redirect to login page after successful registration
+    setTimeout(() => {
+      navigate('/login');
+    }, 1500);
       }
     } catch (error: unknown) {
       // Handle API errors
-      const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || (error as { message?: string })?.message || 'Terjadi kesalahan saat mendaftar';
-      toast.error(errorMessage);
+      const axiosError = error as { response?: { data?: any; status?: number } };
+      
+      console.error('Registration error:', axiosError.response?.data || error);
+      
+      if (axiosError.response?.status === 422) {
+        // Validation errors from VineJS/AdonisJS
+        const errorData = axiosError.response.data;
+        
+        // Try different error formats
+        let errorMessage = 'Data yang dikirim tidak valid. Pastikan semua field diisi dengan benar.';
+        
+        if (errorData?.errors && Array.isArray(errorData.errors)) {
+          // Format: { errors: [{ field: "...", message: "..." }] }
+          const messages = errorData.errors.map((err: any) => {
+            if (typeof err === 'string') return err;
+            if (err.message) return `${err.field || ''}: ${err.message}`;
+            return JSON.stringify(err);
+          });
+          errorMessage = `Validasi gagal: ${messages.join(', ')}`;
+        } else if (errorData?.message) {
+          errorMessage = errorData.message;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        }
+        
+        toast.error(errorMessage);
+      } else {
+        const errorMessage = axiosError.response?.data?.message || (error as { message?: string })?.message || 'Terjadi kesalahan saat mendaftar';
+        toast.error(errorMessage);
+      }
     }
   };
 

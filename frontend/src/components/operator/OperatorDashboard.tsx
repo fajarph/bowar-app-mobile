@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react';
+import { useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
 import {
@@ -7,12 +7,8 @@ import {
   DollarSign,
   Calendar,
   TrendingUp,
-  Clock,
-  MessageCircle,
   Shield,
   LogOut,
-  CheckCircle,
-  XCircle,
   Activity,
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
@@ -39,8 +35,7 @@ export function OperatorDashboard() {
     });
 
     const activeBookings = cafeBookings.filter((b) => b.status === 'active').length;
-    const paidBookings = todayBookings.filter((b) => b.isPaid);
-    const todayRevenue = paidBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+    const todayRevenue = 0; // TODO: Calculate revenue from bookings
 
     const cafeMembers = context?.registeredUsers.filter((u) =>
       u.cafeWallets?.some((w) => w.cafeId === operator.cafeId)
@@ -53,7 +48,7 @@ export function OperatorDashboard() {
     const utilizationRate = ((occupiedPCs / totalPCs) * 100).toFixed(1);
 
     // Pending actions
-    const pendingPayments = cafeBookings.filter((b) => !b.isPaid && b.status !== 'cancelled').length;
+    const pendingPayments = cafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length;
     const unreadMessages = Object.values(context?.chatMessages || {}).flat().filter(
       (m: any) => m.sender === 'user'
     ).length % 5; // Mock unread count

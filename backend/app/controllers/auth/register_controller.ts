@@ -1,85 +1,126 @@
 import User from '#models/user'
 import Warnet from '#models/warnet'
-import hash from '@adonisjs/core/services/hash'
 import { HttpContext } from '@adonisjs/core/http'
+import { registerValidator } from '#validators/registerValidator'
 
 export default class RegisterController {
   /**
    * REGISTER USER BIASA
    */
   async registerUser({ request, response }: HttpContext) {
-    const data = request.only(['username', 'email', 'password'])
+    try {
+      const data = await request.validateUsing(registerValidator)
 
-    const hashedPassword = await hash.make(data.password)
+      // Username unique
+      if (await User.findBy('username', data.username)) {
+        return response.badRequest({ message: 'Username sudah digunakan' })
+      }
 
-    const user = await User.create({
-      username: data.username,
-      email: data.email,
-      password: hashedPassword,
-      role: 'user',
-    })
+      // Email unique
+      if (await User.findBy('email', data.email)) {
+        return response.badRequest({ message: 'Email sudah digunakan' })
+      }
 
-    return response.created({
-      message: 'User berhasil terdaftar',
-      user,
-    })
+      const user = await User.create({
+        username: data.username,
+        email: data.email,
+        password: data.password, // ✅ RAW PASSWORD
+        role: 'user',
+      })
+
+      return response.created({
+        message: 'User berhasil terdaftar',
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+        },
+      })
+    } catch (error: any) {
+      if (error.code === 'E_VALIDATION_FAILURE') throw error
+
+      return response.internalServerError({
+        message: 'Terjadi kesalahan saat mendaftar',
+      })
+    }
   }
 
   /**
-   * REGISTER MEMBER (WAJIB PILIH WARNET)
+   * REGISTER MEMBER
    */
   async registerMember({ request, response }: HttpContext) {
-    const data = request.only(['username', 'email', 'password', 'warnet_id'])
+    const payload = request.only(['username', 'email', 'password', 'warnet_id'])
 
-    if (!data.warnet_id) {
-      return response.badRequest({
-        message: 'Member wajib memilih warnet',
-      })
+    const data = await request.validateUsing(registerValidator, {
+      data: {
+        username: payload.username,
+        email: payload.email,
+        password: payload.password,
+      },
+    })
+
+    if (!payload.warnet_id) {
+      return response.badRequest({ message: 'Member wajib memilih warnet' })
     }
 
-    const warnet = await Warnet.find(data.warnet_id)
+    const warnet = await Warnet.find(payload.warnet_id)
     if (!warnet) {
-      return response.badRequest({
-        message: 'Warnet tidak ditemukan',
-      })
+      return response.badRequest({ message: 'Warnet tidak ditemukan' })
     }
 
-    const hashedPassword = await hash.make(data.password)
+    if (await User.findBy('username', data.username)) {
+      return response.badRequest({ message: 'Username sudah digunakan' })
+    }
+
+    const existingEmail = await User.findBy('email', data.email)
+    if (existingEmail && existingEmail.warnet_id === payload.warnet_id) {
+      return response.badRequest({
+        message: 'Email ini sudah terdaftar di warnet ini',
+      })
+    }
 
     const user = await User.create({
       username: data.username,
       email: data.email,
-      password: hashedPassword,
+      password: data.password, // ✅ RAW PASSWORD
       role: 'member',
-      warnet_id: data.warnet_id,
+      warnet_id: payload.warnet_id,
     })
+
+    await user.load('warnet')
 
     return response.created({
       message: 'Member berhasil terdaftar',
-      user,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        warnet: {
+          id: user.warnet.id,
+          name: user.warnet.name,
+          address: user.warnet.address,
+        },
+      },
     })
   }
 
   /**
    * REGISTER OPERATOR
-   * (DIREKOMENDASIKAN UNTUK ADMIN SAJA)
    */
   async registerOperator({ request, response }: HttpContext) {
     const data = request.only(['username', 'email', 'password', 'warnet_id'])
 
     const warnet = await Warnet.find(data.warnet_id)
     if (!warnet) {
-      return response.badRequest({
-        message: 'Warnet tidak ditemukan',
-      })
+      return response.badRequest({ message: 'Warnet tidak ditemukan' })
     }
-
-    const hashedPassword = await hash.make(data.password)
 
     const user = await User.create({
       username: data.username,
       email: data.email,
-      password: hashedPassword,
+      password: data.password, // ✅ RAW PASSWORD
       role: 'operator',
       warnet_id: data.warnet_id,
     })
@@ -88,13 +129,5 @@ export default class RegisterController {
       message: 'Operator berhasil dibuat',
       user,
     })
-  }
-
-  /**
-   * PROFILE
-   */
-  async profile({ auth }: HttpContext) {
-    await auth.check()
-    return { user: auth.user }
   }
 }

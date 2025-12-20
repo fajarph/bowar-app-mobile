@@ -4,6 +4,7 @@ import type { HasMany } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Pc from './pc.js'
 import Booking from './booking.js'
+import ChatMessage from './chat_message.js'
 
 export default class Warnet extends BaseModel {
   @column({ isPrimary: true })
@@ -42,14 +43,25 @@ export default class Warnet extends BaseModel {
   @column()
   declare longitude: number | null
 
-  @hasMany(() => User)
+  @hasMany(() => User, {
+    foreignKey: 'warnet_id',
+  })
   declare members: HasMany<typeof User>
 
-  @hasMany(() => Pc)
+  @hasMany(() => Pc, {
+    foreignKey: 'warnet_id',
+  })
   declare pcs: HasMany<typeof Pc>
 
-  @hasMany(() => Booking)
+  @hasMany(() => Booking, {
+    foreignKey: 'warnet_id',
+  })
   declare bookings: HasMany<typeof Booking>
+
+  @hasMany(() => ChatMessage, {
+    foreignKey: 'warnet_id',
+  })
+  declare chatMessages: HasMany<typeof ChatMessage>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

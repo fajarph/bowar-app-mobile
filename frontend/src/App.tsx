@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { getStoredUser } from './services/api';
 import { LoginScreen } from './components/LoginScreen';
 import { RegisterScreen } from './components/RegisterScreen';
 import { HomeScreen } from './components/HomeScreen';
@@ -14,6 +15,11 @@ import { BookingHistoryScreen } from './components/BookingHistoryScreen';
 import { PCAvailabilityScreen } from './components/PCAvailabilityScreen';
 import { EditProfileScreen } from './components/EditProfileScreen';
 import { MapScreen } from './components/MapScreen';
+import { OperatorLoginScreen } from './components/operator/OperatorLoginScreen';
+import { OperatorDashboard } from './components/operator/OperatorDashboard';
+import { OperatorPCGrid } from './components/operator/OperatorPCGrid';
+import { OperatorBookings } from './components/operator/OperatorBookings';
+import { OperatorMembers } from './components/operator/OperatorMembers';
 import { Toaster } from './components/ui/sonner';
 
 // Types
@@ -80,17 +86,36 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface Operator {
+  id: string;
+  username: string;
+  password: string;
+  name: string;
+  cafeId: string;
+  cafeName: string;
+}
+
 interface AppContextType {
   users: User[];
+  registeredUsers: User[];
   user: User | null;
+  operator: Operator | null;
+  operators: Operator[];
   setUser: (user: User | null) => void;
+  setOperator: (operator: Operator | null) => void;
   cafes: Cafe[];
   bookings: Booking[];
   getUserBookings: () => Booking[];
   addBooking: (booking: Booking) => void;
   cancelBooking: (bookingId: string) => void;
   updateBooking: (bookingId: string, updates: Partial<Booking>) => void;
+  updateBookingStatus: (bookingId: string, status: Booking['status']) => void;
   updateWallet: (cafeId: string, minutes: number, isActive: boolean) => void;
+  updateMemberWallet: (
+    userId: string,
+    cafeId: string,
+    updates: Partial<CafeWallet>
+  ) => void;
   extendWallet: (cafeId: string, minutes: number) => void;
   chatMessages: { [cafeId: string]: ChatMessage[] };
   addChatMessage: (cafeId: string, message: ChatMessage) => void;
@@ -108,10 +133,36 @@ export const AppContext = createContext<AppContextType | null>(null);
 
 function App() {
   const [users, setUsers] = useState<User[]>([]);
+  const [operator, setOperator] = useState<Operator | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [chatMessages, setChatMessages] = useState<{ [cafeId: string]: ChatMessage[] }>({});
   const [pcStatuses, setPcStatuses] = useState<{ [cafeId: string]: PCStatus[] }>({});
+
+  // Check for stored user on mount
+  useEffect(() => {
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      // Convert backend user format to frontend format
+      const frontendRole: 'regular' | 'member' = storedUser.role === 'user' ? 'regular' : 'member';
+      const frontendUser: User = {
+        id: storedUser.id.toString(),
+        username: storedUser.username,
+        email: storedUser.email,
+        password: '',
+        role: frontendRole,
+        cafeWallets: storedUser.warnet ? [{
+          cafeId: storedUser.warnet.id.toString(),
+          cafeName: storedUser.warnet.name,
+          remainingMinutes: 0,
+          isActive: false,
+          lastUpdated: Date.now(),
+        }] : undefined,
+        credits: 0,
+      };
+      setUser(frontendUser);
+    }
+  }, []);
 
   // Mock cafes data
   const cafes: Cafe[] = [
@@ -133,32 +184,25 @@ function App() {
       memberPricePerHour: 7500,
       totalPCs: 25,
     },
+  ];
+
+  // Mock operators tied to cafes above (for UI navigation)
+  const operators: Operator[] = [
     {
-      id: 'cafe3',
-      name: 'Netplay Station',
-      location: 'Jl. Thamrin No. 88, Jakarta Pusat',
-      image: 'https://images.unsplash.com/photo-1758410473607-e78a23fd6e57?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjeWJlcmNhZmUlMjBjb21wdXRlcnN8ZW58MXx8fHwxNzY0MzM1MzE2fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 7000,
-      memberPricePerHour: 5500,
-      totalPCs: 20,
+      id: 'op1',
+      username: 'operator1',
+      password: 'password',
+      name: 'Operator CyberArena',
+      cafeId: cafes[0].id,
+      cafeName: cafes[0].name,
     },
     {
-      id: 'cafe4',
-      name: 'Warnet Premium',
-      location: 'Jl. MH Thamrin No. 22, Jakarta Pusat',
-      image: 'https://images.unsplash.com/photo-1516691660293-39fdef9f145b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbnRlcm5ldCUyMGNhZmUlMjBuZW9ufGVufDF8fHx8MTc2NDMzNTMxNnww&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 9000,
-      memberPricePerHour: 7000,
-      totalPCs: 35,
-    },
-    {
-      id: 'cafe5',
-      name: 'Esports Hub',
-      location: 'Jl. Rasuna Said No. 5, Jakarta Selatan',
-      image: 'https://images.unsplash.com/photo-1704871132546-d1d3b845ae65?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBzZXR1cCUyMHJnYnxlbnwxfHx8fDE3NjQyMzE2MDJ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 12000,
-      memberPricePerHour: 9000,
-      totalPCs: 40,
+      id: 'op2',
+      username: 'operator2',
+      password: 'password',
+      name: 'Operator GameZone',
+      cafeId: cafes[1].id,
+      cafeName: cafes[1].name,
     },
   ];
 
@@ -223,6 +267,24 @@ function App() {
 
   const registerUser = (newUser: User) => {
     setUsers((prev) => [...prev, newUser]);
+  };
+
+  const updateMemberWallet = (userId: string, cafeId: string, updates: Partial<CafeWallet>) => {
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== userId || !u.cafeWallets) return u;
+        const updatedWallets = u.cafeWallets.map((w) =>
+          w.cafeId === cafeId ? { ...w, ...updates } : w
+        );
+        return { ...u, cafeWallets: updatedWallets };
+      })
+    );
+  };
+
+  const updateBookingStatus = (bookingId: string, status: Booking['status']) => {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
+    );
   };
 
   const findUserByCredentials = (
@@ -359,8 +421,12 @@ function App() {
 
   const contextValue: AppContextType = {
     users,
+    registeredUsers: users,
     user,
+    operator,
+    operators,
     setUser,
+    setOperator,
     getUserBookings,
     pcStatuses,
     getPCsForCafe,
@@ -369,7 +435,9 @@ function App() {
     addBooking,
     cancelBooking,
     updateBooking,
+    updateBookingStatus,
     updateWallet,
+    updateMemberWallet,
     extendWallet,
     chatMessages,
     addChatMessage,
@@ -443,6 +511,23 @@ function App() {
             <Route
               path="/map"
               element={user ? <MapScreen /> : <Navigate to="/login" />}
+            />
+            <Route path="/operator/login" element={<OperatorLoginScreen />} />
+            <Route
+              path="/operator/dashboard"
+              element={operator ? <OperatorDashboard /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/pc-grid"
+              element={operator ? <OperatorPCGrid /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/bookings"
+              element={operator ? <OperatorBookings /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/members"
+              element={operator ? <OperatorMembers /> : <Navigate to="/operator/login" />}
             />
           </Routes>
           <Toaster />

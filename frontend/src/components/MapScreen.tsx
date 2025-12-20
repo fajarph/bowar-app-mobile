@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react";
+import { useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppContext } from "../App";
 import {
@@ -78,8 +78,6 @@ export function MapScreen() {
     },
   ];
 
-  // Map center (Jakarta center)
-  const mapCenter = { lat: -6.2088, lng: 106.8456 };
 
   // Simulate getting user location
   useEffect(() => {
@@ -160,7 +158,7 @@ export function MapScreen() {
 
             {/* Map markers */}
             <div className="relative w-full h-full">
-              {cafeMarkers.map((cafe, index) => {
+              {cafeMarkers.map((cafe) => {
                 // Position markers based on relative coordinates
                 const x = ((cafe.lng - 106.8) / 0.06) * 100;
                 const y = ((cafe.lat + 6.18) / 0.06) * 100;

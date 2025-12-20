@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppContext } from '../App';
 import { ArrowLeft, MapPin, Cpu, Monitor, MemoryStick, Zap } from 'lucide-react';
@@ -8,7 +8,7 @@ export function WarnetDetailScreen() {
   const { id } = useParams();
   const context = useContext(AppContext);
   
-  const warnet = context?.warnets.find(w => w.id === id);
+  const warnet = context?.cafes.find((w) => w.id === id);
 
   if (!warnet) {
     return (
@@ -18,12 +18,13 @@ export function WarnetDetailScreen() {
     );
   }
 
+  // Mock specs since Cafe interface doesn't have specs
   const specItems = [
-    { icon: Cpu, label: 'CPU', value: warnet.specs.cpu },
-    { icon: Zap, label: 'GPU', value: warnet.specs.gpu },
-    { icon: MemoryStick, label: 'RAM', value: warnet.specs.ram },
-    { icon: Monitor, label: 'Monitor', value: warnet.specs.monitor },
-    { icon: Zap, label: 'Refresh Rate', value: warnet.specs.refreshRate }
+    { icon: Cpu, label: 'CPU', value: 'Intel i7-12700K' },
+    { icon: Zap, label: 'GPU', value: 'RTX 3060' },
+    { icon: MemoryStick, label: 'RAM', value: '16GB DDR4' },
+    { icon: Monitor, label: 'Monitor', value: '24" 144Hz' },
+    { icon: Zap, label: 'Refresh Rate', value: '144Hz' }
   ];
 
   const isMemberCafe = context?.user?.role === 'member' && 
@@ -31,7 +32,7 @@ export function WarnetDetailScreen() {
     
   const pricePerHour = isMemberCafe
     ? warnet.memberPricePerHour
-    : warnet.pricePerHour;
+    : warnet.regularPricePerHour;
 
   return (
     <div className="min-h-screen pb-16">
@@ -68,7 +69,7 @@ export function WarnetDetailScreen() {
         {/* Description Card */}
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-6">
           <h3 className="text-slate-200 mb-3">About</h3>
-          <p className="text-slate-400 leading-relaxed">{warnet.description}</p>
+          <p className="text-slate-400 leading-relaxed">Premium gaming experience with high-end PC specifications and comfortable environment.</p>
         </div>
 
         {/* Price Card */}

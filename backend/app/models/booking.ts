@@ -54,13 +54,19 @@ export default class Booking extends BaseModel {
   @column.dateTime()
   declare can_cancel_until: DateTime | null
 
-  @belongsTo(() => User)
+  @belongsTo(() => User, {
+    foreignKey: 'user_id',
+  })
   declare user: BelongsTo<typeof User>
 
-  @belongsTo(() => Warnet)
+  @belongsTo(() => Warnet, {
+    foreignKey: 'warnet_id',
+  })
   declare warnet: BelongsTo<typeof Warnet>
 
-  @hasOne(() => Payment)
+  @hasOne(() => Payment, {
+    foreignKey: 'booking_id',
+  })
   declare payment: HasOne<typeof Payment>
 
   @column.dateTime({ autoCreate: true })

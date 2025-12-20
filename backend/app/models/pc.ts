@@ -20,7 +20,9 @@ export default class Pc extends BaseModel {
   @column()
   declare current_booking_id: number | null
 
-  @belongsTo(() => Warnet)
+  @belongsTo(() => Warnet, {
+    foreignKey: 'warnet_id',
+  })
   declare warnet: BelongsTo<typeof Warnet>
 
   @belongsTo(() => Booking, {

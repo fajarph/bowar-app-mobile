@@ -32,7 +32,9 @@ export default class Payment extends BaseModel {
   @column()
   declare transaction_reference: string | null
 
-  @belongsTo(() => Booking)
+  @belongsTo(() => Booking, {
+    foreignKey: 'booking_id',
+  })
   declare booking: BelongsTo<typeof Booking>
 
   @belongsTo(() => User, {

@@ -1,4 +1,4 @@
-import React, { useContext, useState, useMemo } from 'react';
+import { useContext, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
 import {
@@ -10,7 +10,6 @@ import {
   Search,
   Mail,
   Calendar,
-  DollarSign,
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';

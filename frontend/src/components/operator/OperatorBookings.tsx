@@ -1,16 +1,14 @@
-import React, { useContext, useState, useMemo } from 'react';
+import { useContext, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
 import {
   Calendar,
   Clock,
   Monitor,
-  User,
   Crown,
   DollarSign,
   CheckCircle,
   XCircle,
-  Filter,
   Search,
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
@@ -57,7 +55,7 @@ export function OperatorBookings() {
   }, [context?.bookings, operator.cafeId, filterStatus, searchQuery, context?.registeredUsers]);
 
   const handleConfirmPayment = (bookingId: string) => {
-    context?.updateBooking(bookingId, { isPaid: true });
+    context?.updateBooking(bookingId, { paymentStatus: 'paid' });
     toast.success('Pembayaran dikonfirmasi!');
   };
 
@@ -86,7 +84,7 @@ export function OperatorBookings() {
     return {
       total: allCafeBookings.length,
       active: allCafeBookings.filter((b) => b.status === 'active').length,
-      pending: allCafeBookings.filter((b) => !b.isPaid && b.status !== 'cancelled').length,
+      pending: allCafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length,
       completed: allCafeBookings.filter((b) => b.status === 'completed').length,
     };
   }, [context?.bookings, operator.cafeId]);
@@ -265,7 +263,7 @@ export function OperatorBookings() {
                           Selesai
                         </span>
                       )}
-                      {booking.status === 'pending' && (
+                      {booking.paymentStatus === 'pending' && (
                         <span className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-xs px-3 py-1.5 rounded-full">
                           Tertunda
                         </span>
@@ -283,9 +281,9 @@ export function OperatorBookings() {
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-teal-400" />
                       <span className="text-teal-300">
-                        {formatCurrency(booking.totalPrice)}
+                        {formatCurrency(0)} {/* TODO: Calculate total price from duration and cafe price */}
                       </span>
-                      {booking.isPaid ? (
+                      {booking.paymentStatus === 'paid' ? (
                         <span className="text-xs text-green-400 flex items-center gap-1 ml-2">
                           <CheckCircle className="w-3.5 h-3.5" />
                           Lunas
@@ -300,7 +298,7 @@ export function OperatorBookings() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
-                      {!booking.isPaid && booking.status !== 'cancelled' && (
+                      {booking.paymentStatus === 'pending' && booking.status !== 'cancelled' && (
                         <button
                           onClick={() => handleConfirmPayment(booking.id)}
                           className="bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 px-4 py-2 rounded-xl text-sm transition-all"
@@ -308,7 +306,7 @@ export function OperatorBookings() {
                           Konfirmasi Pembayaran
                         </button>
                       )}
-                      {booking.status === 'pending' && (
+                      {booking.paymentStatus === 'pending' && (
                         <button
                           onClick={() => handleCancelBooking(booking.id)}
                           className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl text-sm transition-all"

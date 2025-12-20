@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppContext } from '../App';
 import { ArrowLeft, MapPin, Navigation } from 'lucide-react';
@@ -8,7 +8,7 @@ export function MapsScreen() {
   const { id } = useParams();
   const context = useContext(AppContext);
   
-  const warnet = context?.warnets.find(w => w.id === id);
+  const warnet = context?.cafes.find(w => w.id === id);
 
   if (!warnet) {
     return (
@@ -42,7 +42,7 @@ export function MapsScreen() {
             <MapPin className="w-16 h-16 text-cyan-400 mx-auto mb-4" />
             <p className="text-slate-400">Map View</p>
             <p className="text-slate-500 text-sm mt-2">
-              Lat: {warnet.coordinates.lat}, Lng: {warnet.coordinates.lng}
+              {warnet.location}
             </p>
           </div>
         </div>

@@ -1,12 +1,9 @@
-import React, { useState, useContext, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { ArrowLeft, Send, MessageCircle } from 'lucide-react';
 import { BottomNav } from './BottomNav';
-import { toast } from 'sonner';
 
 export function ChatScreen() {
-  const navigate = useNavigate();
   const context = useContext(AppContext);
   const [selectedCafe, setSelectedCafe] = useState<string | null>(null);
   const [message, setMessage] = useState('');

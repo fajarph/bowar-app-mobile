@@ -1,66 +1,62 @@
-import React, { useState, useContext } from "react";
+import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppContext } from "../App";
 import {
   Gamepad2,
   Eye,
   EyeOff,
-  User,
   Crown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { login } from "../services/api";
 
 export function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loginType, setLoginType] = useState<
-    "regular" | "member"
-  >("regular");
-  const [selectedCafe, setSelectedCafe] = useState("");
   const navigate = useNavigate();
   const context = useContext(AppContext);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username || !password) {
       toast.error("Mohon isi semua kolom");
       return;
     }
 
-    // Check if member login requires cafe selection
-    if (loginType === "member" && !selectedCafe) {
-      toast.error("Mohon pilih warnet");
-      return;
-    }
+    try {
+      // ✅ SATU LOGIN API
+      const response = await login({
+        username,
+        password,
+      });
 
-    // Try to find user in registered users with credentials
-    const user = context?.findUserByCredentials(username, password, loginType);
+      const backendUser = response.user;
 
-    if (user) {
-      // For member login, verify the selected cafe
-      if (loginType === "member") {
-        const hasCafeAccess = user.cafeWallets?.some(
-          (wallet) => wallet.cafeId === selectedCafe,
-        );
-        if (!hasCafeAccess) {
-          toast.error(
-            "Anda bukan member warnet ini",
-          );
-          return;
-        }
-        toast.success(
-          `Login berhasil! Selamat datang di ${user.cafeWallets?.find((w) => w.cafeId === selectedCafe)?.cafeName}`,
-        );
-      } else {
-        toast.success("Login berhasil! Selamat datang di Bowar.");
-      }
+      // ✅ MAPPING ROLE BACKEND → FRONTEND (TYPE-SAFE)
+      const role: "regular" | "member" =
+        backendUser.role === "member" ? "member" : "regular";
 
-      context?.setUser(user);
+      const frontendUser = {
+        id: String(backendUser.id),
+        username: backendUser.username,
+        email: backendUser.email,
+        password: "", // tidak disimpan
+        role,
+        credits: backendUser.credits ?? 0,
+      };
+
+      context?.setUser(frontendUser);
+
+      toast.success("Login berhasil! Selamat datang di Bowar.");
       navigate("/home");
-    } else {
-      toast.error("Username atau password salah");
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { message?: string }; status?: number } };
+      const message = axiosError.response?.data?.message || "Username atau password salah";
+      toast.error(message);
     }
   };
+
+
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -98,58 +94,6 @@ export function LoginScreen() {
         {/* Login Card */}
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8 shadow-2xl shadow-blue-500/5">
           <div className="space-y-5">
-            {/* Login Type Selector */}
-            <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-1.5 grid grid-cols-2 gap-1.5">
-              <button
-                onClick={() => {
-                  setLoginType("regular");
-                  setSelectedCafe("");
-                }}
-                className={`flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${
-                  loginType === "regular"
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg shadow-blue-500/30"
-                    : "text-slate-400 hover:text-slate-300"
-                }`}
-              >
-                <User className="w-4 h-4" />
-                <span className="text-sm">Regular</span>
-              </button>
-              <button
-                onClick={() => setLoginType("member")}
-                className={`flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${
-                  loginType === "member"
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg shadow-blue-500/30"
-                    : "text-slate-400 hover:text-slate-300"
-                }`}
-              >
-                <Crown className="w-4 h-4" />
-                <span className="text-sm">Member</span>
-              </button>
-            </div>
-
-            {/* Member Cafe Selection */}
-            {loginType === "member" && (
-              <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-2xl p-4">
-                <label className="block text-blue-300 text-sm mb-2">
-                  Pilih Warnet
-                </label>
-                <select
-                  value={selectedCafe}
-                  onChange={(e) =>
-                    setSelectedCafe(e.target.value)
-                  }
-                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                >
-                  <option value="">Pilih warnet Anda</option>
-                  {context?.cafes.map((cafe) => (
-                    <option key={cafe.id} value={cafe.id}>
-                      {cafe.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             {/* Username Input */}
             <div>
               <label className="block text-slate-300 text-sm mb-2">
@@ -217,7 +161,7 @@ export function LoginScreen() {
               onClick={handleLogin}
               className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-[0.98]"
             >
-              MASUK {loginType === "member" ? "SEBAGAI MEMBER" : ""}
+              MASUK
             </button>
 
             {/* Register Link */}
@@ -245,23 +189,6 @@ export function LoginScreen() {
                 <Crown className="w-4 h-4" />
                 <span>Login Operator</span>
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Test Credentials */}
-        <div className="mt-6 bg-slate-900/30 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-4">
-          <p className="text-slate-400 text-xs text-center mb-2">
-            Kredensial Testing:
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-800/50 rounded-xl p-2 text-center">
-              <p className="text-slate-500">Regular:</p>
-              <p className="text-teal-400">regular</p>
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-2 text-center">
-              <p className="text-slate-500">Member:</p>
-              <p className="text-teal-400">member</p>
             </div>
           </div>
         </div>

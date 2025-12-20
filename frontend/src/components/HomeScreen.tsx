@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { Gamepad2, MapPin, Clock, Plus, X, Wallet, CreditCard, Building2, Smartphone, CheckCircle } from 'lucide-react';
@@ -50,7 +50,6 @@ export function HomeScreen() {
 
     // Simulate payment processing
     const minutesToAdd = hoursToAdd * 60;
-    const totalCost = hoursToAdd * cafe.memberPricePerHour;
 
     // Process payment and add time
     context?.extendWallet(selectedCafeForTime, minutesToAdd);

@@ -1,29 +1,29 @@
-import React, { useContext, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AppContext, Booking } from '../App';
-import { ArrowLeft, Building2, Wallet, QrCode, Clock, Calendar } from 'lucide-react';
+import { useContext, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { AppContext } from '../App';
+import { ArrowLeft, QrCode, Clock, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function BookingPaymentScreen() {
   const navigate = useNavigate();
+  const { bookingId } = useParams<{ bookingId: string }>();
   const context = useContext(AppContext);
-  const [duration, setDuration] = useState(2); // minimum 2 hours for members
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
 
-  const warnet = context?.selectedWarnet;
-  const pc = context?.selectedPC;
-  const isMember = context?.user?.role === 'member' && 
-    context.user.cafeWallets?.some((w) => w.cafeId === warnet?.id);
+  // Get booking from context
+  const booking = context?.bookings.find((b) => b.id === bookingId);
+  const warnet = context?.cafes.find((c) => c.id === booking?.cafeId);
 
-  if (!warnet || !pc) {
+  if (!booking || !warnet) {
     navigate('/home');
     return null;
   }
 
-  const pricePerHour = isMember ? warnet.memberPricePerHour : warnet.pricePerHour;
-  const totalPrice = pricePerHour * duration;
+  const isMember = context?.user?.role === 'member' && 
+    context.user.cafeWallets?.some((w) => w.cafeId === warnet.id);
 
-  const minDuration = isMember ? 2 : 1;
+  const pricePerHour = isMember ? warnet.memberPricePerHour : warnet.regularPricePerHour;
+  const totalPrice = pricePerHour * booking.duration;
 
   const paymentMethods = [
     { id: 'bca', name: 'BCA', type: 'bank', logo: '🏦' },
@@ -41,28 +41,15 @@ export function BookingPaymentScreen() {
       return;
     }
 
-    const now = new Date();
-    const newBooking: Booking = {
-      id: `booking-${Date.now()}`,
-      userId: context?.user?.id || '', // Add userId
-      cafeId: warnet.id,
-      cafeName: warnet.name,
-      pcNumber: pc.number,
-      duration: duration,
-      date: now.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-      status: 'active' as const,
-      paymentStatus: 'paid' as const,
-      bookedAt: Date.now(),
-      remainingMinutes: duration * 60,
-      isSessionActive: false,
-    };
-
-    context?.addBooking(newBooking);
+    // Update booking payment status
+    context?.updateBooking(booking.id, {
+      paymentStatus: 'paid',
+    });
+    
     toast.success('✅ Payment successful! Timer starts after login at the café.');
     
     setTimeout(() => {
-      navigate(`/booking/detail/${newBooking.id}`);
+      navigate(`/booking-history`);
     }, 1000);
   };
 
@@ -95,7 +82,7 @@ export function BookingPaymentScreen() {
             </div>
             <div className="flex justify-between">
               <p className="text-slate-400">PC Number</p>
-              <p className="text-slate-200">PC {pc.number}</p>
+              <p className="text-slate-200">PC {booking.pcNumber}</p>
             </div>
             <div className="flex justify-between items-center">
               <p className="text-slate-400">Order Date</p>
@@ -117,33 +104,12 @@ export function BookingPaymentScreen() {
             </div>
             
             <div className="border-t border-slate-800 pt-3 mt-3">
-              <div className="flex justify-between items-center">
-                <p className="text-slate-200">Duration</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setDuration(Math.max(minDuration, duration - 1))}
-                    className="w-8 h-8 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 rounded-lg text-slate-300 transition-colors"
-                  >
-                    -
-                  </button>
-                  <span className="text-cyan-400 min-w-[60px] text-center">{duration} hours</span>
-                  <button
-                    onClick={() => setDuration(duration + 1)}
-                    className="w-8 h-8 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 rounded-lg text-slate-300 transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
+            <div className="flex justify-between items-center">
+              <p className="text-slate-200">Duration</p>
+              <span className="text-cyan-400">{booking.duration} hours</span>
+            </div>
             </div>
 
-            {isMember && (
-              <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3">
-                <p className="text-cyan-400 text-sm">
-                  Member first session: minimum 2 hours. Extension available after login.
-                </p>
-              </div>
-            )}
             
             <div className="border-t border-slate-800 pt-3">
               <div className="flex justify-between">

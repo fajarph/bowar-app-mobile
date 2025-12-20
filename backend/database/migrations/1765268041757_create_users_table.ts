@@ -7,11 +7,13 @@ export default class extends BaseSchema {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id')
       
-      table.string('username').notNullable().unique()
-      table.string('email').notNullable().unique()
-      table.string('password').notNullable()
+      table.string('username', 255).notNullable().unique()
+      table.string('email', 255).notNullable().unique()
+      // Scrypt hash menghasilkan string panjang, jadi gunakan text atau string dengan length cukup
+      table.string('password', 255).notNullable()
 
-      table.enum('role', ['user', 'member']).notNullable().defaultTo('user')
+      // Tambahkan 'operator' ke enum role
+      table.enum('role', ['user', 'member', 'operator']).notNullable().defaultTo('user')
 
       // khusus member
       table.integer('warnet_id').unsigned().references('id').inTable('warnets').onDelete('SET NULL').nullable()

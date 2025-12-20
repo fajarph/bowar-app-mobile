@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppContext } from '../App';
 import { ArrowLeft, Clock, Calendar, CreditCard, Monitor, MapPin, Plus } from 'lucide-react';
@@ -14,31 +14,30 @@ export function BookingDetailScreen() {
   const [cancelTimeLeft, setCancelTimeLeft] = useState(120); // 2 minutes in seconds
   const [canCancel, setCanCancel] = useState(true);
 
-  // Get booking - either by ID or get active booking
-  const booking = id === 'active' 
-    ? context?.activeBooking 
-    : context?.bookings.find(b => b.id === id);
+  // Get booking by ID
+  const booking = context?.bookings.find(b => b.id === id);
 
   useEffect(() => {
     if (!booking) return;
 
     // Initialize remaining time
-    if (booking.remainingTime) {
-      setRemainingTime(booking.remainingTime);
+    if (booking.remainingMinutes) {
+      setRemainingTime(booking.remainingMinutes * 60); // Convert minutes to seconds
     }
 
     // Calculate cancel time left
-    const timeSinceCreation = Math.floor((Date.now() - booking.createdAt.getTime()) / 1000);
+    const timeSinceCreation = Math.floor((Date.now() - booking.bookedAt) / 1000);
     const timeLeft = Math.max(0, 120 - timeSinceCreation);
     setCancelTimeLeft(timeLeft);
-    setCanCancel(timeLeft > 0 && booking.status === 'pending');
+    setCanCancel(timeLeft > 0 && booking.paymentStatus === 'pending');
 
-    // Timer for remaining session time (only updates if logged in)
+    // Timer for remaining session time (only updates if session is active)
     const sessionInterval = setInterval(() => {
-      if (booking.loggedIn && booking.remainingTime && booking.remainingTime > 0) {
+      if (booking.isSessionActive && booking.remainingMinutes && booking.remainingMinutes > 0) {
         setRemainingTime(prev => {
           const newTime = Math.max(0, prev - 1);
-          context?.updateBooking(booking.id, { remainingTime: newTime });
+          // Update remaining minutes (convert seconds back to minutes)
+          context?.updateBooking(booking.id, { remainingMinutes: newTime / 60 });
           return newTime;
         });
       }
@@ -46,10 +45,10 @@ export function BookingDetailScreen() {
 
     // Timer for cancel window
     const cancelInterval = setInterval(() => {
-      const timeSinceCreation = Math.floor((Date.now() - booking.createdAt.getTime()) / 1000);
+      const timeSinceCreation = Math.floor((Date.now() - booking.bookedAt) / 1000);
       const timeLeft = Math.max(0, 120 - timeSinceCreation);
       setCancelTimeLeft(timeLeft);
-      setCanCancel(timeLeft > 0 && booking.status === 'pending');
+      setCanCancel(timeLeft > 0 && booking.paymentStatus === 'pending');
     }, 1000);
 
     return () => {
@@ -85,7 +84,8 @@ export function BookingDetailScreen() {
     if (!booking) return;
     
     context?.updateBooking(booking.id, { 
-      loggedIn: true, 
+      isSessionActive: true,
+      sessionStartTime: Date.now(),
       status: 'active'
     });
     toast.success('🕒 Billing time will begin now — enjoy your gaming!');
@@ -94,10 +94,11 @@ export function BookingDetailScreen() {
   const handleExtendSession = () => {
     if (!booking) return;
     
-    // Mock extension - add 1 hour
-    const newTime = remainingTime + 3600;
-    setRemainingTime(newTime);
-    context?.updateBooking(booking.id, { remainingTime: newTime });
+    // Mock extension - add 1 hour (60 minutes)
+    const currentMinutes = booking.remainingMinutes || 0;
+    const newMinutes = currentMinutes + 60;
+    setRemainingTime(newMinutes * 60); // Convert to seconds for display
+    context?.updateBooking(booking.id, { remainingMinutes: newMinutes });
     toast.success('⏱️ Session extended by 1 hour!');
   };
 
@@ -130,7 +131,7 @@ export function BookingDetailScreen() {
           </div>
         </div>
         
-        <BottomNav active="booking" />
+        <BottomNav />
       </div>
     );
   }
@@ -159,7 +160,7 @@ export function BookingDetailScreen() {
               <h1 className="text-slate-200 mb-1">Booking Detail</h1>
               <p className="text-slate-400">#{booking.id.slice(-8)}</p>
             </div>
-            <div className={`px-4 py-2 rounded-xl border ${statusColors[booking.status]}`}>
+            <div className={`px-4 py-2 rounded-xl border ${statusColors[booking.status as keyof typeof statusColors]}`}>
               {booking.status.toUpperCase()}
             </div>
           </div>
@@ -173,14 +174,14 @@ export function BookingDetailScreen() {
             <Clock className="w-12 h-12 text-cyan-400 mx-auto mb-4" />
             <p className="text-slate-400 mb-2">Remaining Time</p>
             <p className="text-cyan-400 text-5xl mb-2">{formatTime(remainingTime)}</p>
-            {!booking.loggedIn && (
+            {!booking.isSessionActive && (
               <p className="text-slate-400 text-sm">Timer will start after login at café</p>
             )}
           </div>
         )}
 
         {/* Cancel Countdown */}
-        {canCancel && booking.status === 'pending' && (
+        {canCancel && booking.paymentStatus === 'pending' && (
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4">
             <p className="text-yellow-400 text-center mb-2">
               Cancel available for: {formatCancelTime(cancelTimeLeft)}
@@ -200,7 +201,7 @@ export function BookingDetailScreen() {
               <MapPin className="w-5 h-5 text-cyan-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-slate-400 text-sm mb-1">Warnet</p>
-                <p className="text-slate-200">{booking.warnetName}</p>
+                <p className="text-slate-200">{booking.cafeName}</p>
               </div>
             </div>
 
@@ -216,7 +217,7 @@ export function BookingDetailScreen() {
               <Calendar className="w-5 h-5 text-cyan-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-slate-400 text-sm mb-1">Order Date</p>
-                <p className="text-slate-200">{booking.orderDate}</p>
+                <p className="text-slate-200">{booking.date}</p>
               </div>
             </div>
 
@@ -224,7 +225,7 @@ export function BookingDetailScreen() {
               <Clock className="w-5 h-5 text-cyan-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-slate-400 text-sm mb-1">Order Time</p>
-                <p className="text-slate-200">{booking.orderTime}</p>
+                <p className="text-slate-200">{booking.time}</p>
               </div>
             </div>
 
@@ -239,15 +240,8 @@ export function BookingDetailScreen() {
             <div className="flex items-start gap-3">
               <CreditCard className="w-5 h-5 text-cyan-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-slate-400 text-sm mb-1">Payment Method</p>
-                <p className="text-slate-200">{booking.paymentMethod}</p>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-800 pt-4">
-              <div className="flex justify-between items-center">
-                <p className="text-slate-400">Total Price</p>
-                <p className="text-cyan-400 text-xl">Rp {booking.totalPrice.toLocaleString()}</p>
+                <p className="text-slate-400 text-sm mb-1">Payment Status</p>
+                <p className="text-slate-200">{booking.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</p>
               </div>
             </div>
           </div>
@@ -255,7 +249,7 @@ export function BookingDetailScreen() {
 
         {/* Actions */}
         <div className="space-y-3">
-          {booking.status === 'pending' && !booking.loggedIn && (
+          {booking.paymentStatus === 'pending' && !booking.isSessionActive && (
             <button
               onClick={handleLogin}
               className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white rounded-2xl py-4 transition-all shadow-lg shadow-green-500/25"
@@ -264,7 +258,7 @@ export function BookingDetailScreen() {
             </button>
           )}
 
-          {booking.status === 'active' && booking.loggedIn && (
+          {booking.status === 'active' && booking.isSessionActive && (
             <button
               onClick={handleExtendSession}
               className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white rounded-2xl py-4 flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-500/25"
@@ -274,7 +268,7 @@ export function BookingDetailScreen() {
             </button>
           )}
 
-          {canCancel && booking.status === 'pending' && (
+          {canCancel && booking.paymentStatus === 'pending' && (
             <button
               onClick={handleCancelBooking}
               className="w-full bg-slate-900/50 backdrop-blur-xl border border-red-500/50 hover:bg-red-500/10 text-red-400 rounded-2xl py-4 transition-all"
@@ -285,7 +279,7 @@ export function BookingDetailScreen() {
         </div>
       </div>
 
-      <BottomNav active="booking" />
+      <BottomNav />
     </div>
   );
 }

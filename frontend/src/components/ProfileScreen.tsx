@@ -4,15 +4,29 @@ import { AppContext, type User, type CafeWallet } from '../App';
 import { User as UserIcon, Mail, Crown, Edit, LogOut, Clock, MapPin } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { toast } from 'sonner';
+import { logout, clearAuth } from '../services/api';
 
 export function ProfileScreen() {
   const navigate = useNavigate();
   const context = useContext(AppContext);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      // Call logout API
+      await logout();
+      // Clear auth data from localStorage
+      clearAuth();
+      // Clear user from context
+      context?.setUser(null);
+      toast.success('👋 Anda berhasil keluar dari Bowar.');
+      navigate('/login');
+    } catch (error: any) {
+      // Even if API fails, clear local data
+      clearAuth();
     context?.setUser(null);
     toast.success('👋 Anda berhasil keluar dari Bowar.');
     navigate('/login');
+    }
   };
 
   const formatTime = (minutes: number) => {

@@ -9,6 +9,7 @@ import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import Warnet from './warnet.js'
 import Booking from './booking.js'
 import Payment from './payment.js'
+import ChatMessage from './chat_message.js'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email', 'username'],
@@ -34,16 +35,30 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare warnet_id: number | null
 
-  @belongsTo(() => Warnet)
+  @belongsTo(() => Warnet, {
+    foreignKey: 'warnet_id',
+  })
   declare warnet: BelongsTo<typeof Warnet>
 
-  @hasMany(() => Booking)
+  @hasMany(() => Booking, {
+    foreignKey: 'user_id',
+  })
   declare bookings: HasMany<typeof Booking>
 
   @hasMany(() => Payment, {
     foreignKey: 'approved_by',
   })
   declare approvedPayments: HasMany<typeof Payment>
+
+  @hasMany(() => ChatMessage, {
+    foreignKey: 'user_id',
+  })
+  declare chatConversations: HasMany<typeof ChatMessage>
+
+  @hasMany(() => ChatMessage, {
+    foreignKey: 'sender_id',
+  })
+  declare sentMessages: HasMany<typeof ChatMessage>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
