@@ -1,32 +1,18 @@
 import { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppContext, type User, type CafeWallet } from '../App';
-import { User as UserIcon, Mail, Crown, Edit, LogOut, Clock, MapPin } from 'lucide-react';
+import { AppContext } from '../App';
+import { User, Mail, Crown, Edit, LogOut, Clock, MapPin, Wallet, ChevronRight } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { toast } from 'sonner';
-import { logout, clearAuth } from '../services/api';
 
 export function ProfileScreen() {
   const navigate = useNavigate();
   const context = useContext(AppContext);
 
-  const handleLogout = async () => {
-    try {
-      // Call logout API
-      await logout();
-      // Clear auth data from localStorage
-      clearAuth();
-      // Clear user from context
-      context?.setUser(null);
-      toast.success('👋 Anda berhasil keluar dari Bowar.');
-      navigate('/login');
-    } catch (error: any) {
-      // Even if API fails, clear local data
-      clearAuth();
+  const handleLogout = () => {
     context?.setUser(null);
     toast.success('👋 Anda berhasil keluar dari Bowar.');
     navigate('/login');
-    }
   };
 
   const formatTime = (minutes: number) => {
@@ -49,11 +35,11 @@ export function ProfileScreen() {
     }> = [];
     
     // Find all users with the same email
-    context.users
-      .filter((u: User) => u.email === context.user?.email && u.role === 'member')
-      .forEach((user: User) => {
+    context.registeredUsers
+      .filter((u) => u.email === context.user?.email && u.role === 'member')
+      .forEach((user) => {
         if (user.cafeWallets) {
-          user.cafeWallets.forEach((wallet: CafeWallet) => {
+          user.cafeWallets.forEach((wallet) => {
             // Check if this wallet is from current logged-in account
             const isCurrentAccount = user.id === context.user?.id;
             allWallets.push({
@@ -105,7 +91,7 @@ export function ProfileScreen() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <UserIcon className="w-12 h-12 text-cyan-400" />
+                  <User className="w-12 h-12 text-cyan-400" />
                 )}
               </div>
             </div>
@@ -186,13 +172,39 @@ export function ProfileScreen() {
           )}
         </div>
 
+        {/* DompetBowar Card */}
+        <button
+          onClick={() => navigate('/dompet-bowar')}
+          className="w-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-3xl p-6 hover:border-cyan-500/50 hover:from-cyan-500/25 hover:to-purple-500/25 transition-all group"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-cyan-500/20 border border-cyan-500/30 rounded-xl p-2">
+                <Wallet className="w-6 h-6 text-cyan-400" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-slate-200 mb-0.5">DompetBowar</h3>
+                <p className="text-slate-400 text-sm">Wallet khusus untuk transaksi</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-cyan-400 group-hover:translate-x-1 transition-transform" />
+          </div>
+          
+          <div className="bg-slate-900/50 border border-slate-700/30 rounded-2xl p-4">
+            <p className="text-slate-400 text-xs mb-1">Saldo Tersedia</p>
+            <p className="text-3xl text-cyan-400 tabular-nums">
+              Rp {(context?.user?.bowarWallet || 0).toLocaleString()}
+            </p>
+          </div>
+        </button>
+
         {/* Account Details */}
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-6">
           <h3 className="text-slate-200 mb-4">Detail Akun</h3>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-2">
-                <UserIcon className="w-4 h-4 text-slate-400" />
+                <User className="w-4 h-4 text-slate-400" />
               </div>
               <div className="flex-1">
                 <p className="text-slate-400 text-xs">Username</p>

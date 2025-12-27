@@ -1,6 +1,5 @@
-import { createContext, useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { getStoredUser } from './services/api';
 import { LoginScreen } from './components/LoginScreen';
 import { RegisterScreen } from './components/RegisterScreen';
 import { HomeScreen } from './components/HomeScreen';
@@ -15,23 +14,30 @@ import { BookingHistoryScreen } from './components/BookingHistoryScreen';
 import { PCAvailabilityScreen } from './components/PCAvailabilityScreen';
 import { EditProfileScreen } from './components/EditProfileScreen';
 import { MapScreen } from './components/MapScreen';
+import { RulesScreen } from './components/RulesScreen';
+import { DompetBowarScreen } from './components/DompetBowarScreen';
+import { Toaster } from './components/ui/sonner';
+import { NeonLogin } from './components/NeonLogin';
+// Operator imports
 import { OperatorLoginScreen } from './components/operator/OperatorLoginScreen';
 import { OperatorDashboard } from './components/operator/OperatorDashboard';
 import { OperatorPCGrid } from './components/operator/OperatorPCGrid';
 import { OperatorBookings } from './components/operator/OperatorBookings';
 import { OperatorMembers } from './components/operator/OperatorMembers';
-import { Toaster } from './components/ui/sonner';
 
 // Types
 export interface User {
   id: string;
   username: string;
   email: string;
-  password: string;
   role: 'regular' | 'member';
   cafeWallets?: CafeWallet[];
-  credits: number;
   avatar?: string;
+  bowarWallet?: number; // Saldo DompetBowar dalam Rupiah
+}
+
+export interface RegisteredUser extends User {
+  password: string; // Store password for authentication
 }
 
 export interface CafeWallet {
@@ -50,6 +56,7 @@ export interface Cafe {
   regularPricePerHour: number;
   memberPricePerHour: number;
   totalPCs: number;
+  rules?: string[]; // Peraturan khusus untuk setiap warnet
 }
 
 export interface PCStatus {
@@ -62,7 +69,7 @@ export interface PCStatus {
 
 export interface Booking {
   id: string;
-  userId: string;
+  userId: string; // Add userId to track which user made the booking
   cafeId: string;
   cafeName: string;
   pcNumber: number;
@@ -76,7 +83,7 @@ export interface Booking {
   remainingMinutes?: number;
   isSessionActive?: boolean;
   sessionStartTime?: number; // Timestamp when session actually started
-  isMemberBooking?: boolean;
+  isMemberBooking?: boolean; // Track if user was member at this cafe when booking
 }
 
 export interface ChatMessage {
@@ -93,76 +100,141 @@ export interface Operator {
   name: string;
   cafeId: string;
   cafeName: string;
+  role: 'operator';
 }
 
-interface AppContextType {
-  users: User[];
-  registeredUsers: User[];
-  user: User | null;
-  operator: Operator | null;
-  operators: Operator[];
-  setUser: (user: User | null) => void;
-  setOperator: (operator: Operator | null) => void;
-  cafes: Cafe[];
-  bookings: Booking[];
-  getUserBookings: () => Booking[];
-  addBooking: (booking: Booking) => void;
-  cancelBooking: (bookingId: string) => void;
-  updateBooking: (bookingId: string, updates: Partial<Booking>) => void;
-  updateBookingStatus: (bookingId: string, status: Booking['status']) => void;
-  updateWallet: (cafeId: string, minutes: number, isActive: boolean) => void;
-  updateMemberWallet: (
-    userId: string,
-    cafeId: string,
-    updates: Partial<CafeWallet>
-  ) => void;
-  extendWallet: (cafeId: string, minutes: number) => void;
-  chatMessages: { [cafeId: string]: ChatMessage[] };
-  addChatMessage: (cafeId: string, message: ChatMessage) => void;
-  pcStatuses: { [cafeId: string]: PCStatus[] };
-  getPCsForCafe: (cafeId: string) => PCStatus[];
-  registerUser: (user: User) => void;
-  findUserByCredentials: (
-    username: string,
-    password: string,
-    role: 'regular' | 'member'
-  ) => User | null;
-}
+import { AppContext, type AppContextType } from './contexts/AppContext';
 
-export const AppContext = createContext<AppContextType | null>(null);
+// Re-export for backward compatibility
+export { AppContext };
 
 function App() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [operator, setOperator] = useState<Operator | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [operator, setOperator] = useState<Operator | null>(null);
+  
+  // Load bookings from localStorage
+  const getInitialBookings = (): Booking[] => {
+    const stored = localStorage.getItem('bowar_bookings');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse stored bookings:', e);
+      }
+    }
+    return [];
+  };
+  
+  const [bookings, setBookings] = useState<Booking[]>(getInitialBookings());
   const [chatMessages, setChatMessages] = useState<{ [cafeId: string]: ChatMessage[] }>({});
   const [pcStatuses, setPcStatuses] = useState<{ [cafeId: string]: PCStatus[] }>({});
-
-  // Check for stored user on mount
-  useEffect(() => {
-    const storedUser = getStoredUser();
-    if (storedUser) {
-      // Convert backend user format to frontend format
-      const frontendRole: 'regular' | 'member' = storedUser.role === 'user' ? 'regular' : 'member';
-      const frontendUser: User = {
-        id: storedUser.id.toString(),
-        username: storedUser.username,
-        email: storedUser.email,
-        password: '',
-        role: frontendRole,
-        cafeWallets: storedUser.warnet ? [{
-          cafeId: storedUser.warnet.id.toString(),
-          cafeName: storedUser.warnet.name,
-          remainingMinutes: 0,
-          isActive: false,
-          lastUpdated: Date.now(),
-        }] : undefined,
-        credits: 0,
-      };
-      setUser(frontendUser);
+  
+  // Load registered users from localStorage or use defaults
+  // Use lazy initializer to avoid calling Date.now() during render
+  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>(() => {
+    const stored = localStorage.getItem('bowar_registered_users');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse stored users:', e);
+      }
     }
-  }, []);
+    
+    // Default mock users for testing
+    // Use a fixed timestamp for initial mock data (avoiding Date.now() during render)
+    const initialTimestamp = 0;
+    return [
+      {
+        id: '1',
+        username: 'regular',
+        email: 'regular@bowar.com',
+        password: 'regular',
+        role: 'regular',
+        bowarWallet: 0, // DompetBowar balance
+      },
+      {
+        id: '2',
+        username: 'member',
+        email: 'member@bowar.com',
+        password: 'member',
+        role: 'member',
+        bowarWallet: 250000, // DompetBowar balance with initial amount
+        cafeWallets: [
+          {
+            cafeId: 'cafe1',
+            cafeName: 'CyberArena Gaming',
+            remainingMinutes: 300,
+            isActive: false,
+            lastUpdated: initialTimestamp,
+          },
+          {
+            cafeId: 'cafe2',
+            cafeName: 'GameZone Elite',
+            remainingMinutes: 180,
+            isActive: false,
+            lastUpdated: initialTimestamp,
+          },
+          {
+            cafeId: 'cafe3',
+            cafeName: 'Netplay Station',
+            remainingMinutes: 240,
+            isActive: false,
+            lastUpdated: initialTimestamp,
+          },
+        ],
+      },
+    ];
+  });
+
+  // Mock operators data
+  const operators: Operator[] = [
+    {
+      id: 'op1',
+      username: 'operator1',
+      password: 'op123',
+      name: 'Ahmad Operator',
+      cafeId: 'cafe1',
+      cafeName: 'CyberArena Gaming',
+      role: 'operator',
+    },
+    {
+      id: 'op2',
+      username: 'operator2',
+      password: 'op123',
+      name: 'Budi Manager',
+      cafeId: 'cafe2',
+      cafeName: 'GameZone Elite',
+      role: 'operator',
+    },
+    {
+      id: 'op3',
+      username: 'operator3',
+      password: 'op123',
+      name: 'Citra Admin',
+      cafeId: 'cafe3',
+      cafeName: 'Netplay Station',
+      role: 'operator',
+    },
+    {
+      id: 'op4',
+      username: 'operator4',
+      password: 'op123',
+      name: 'Doni Staff',
+      cafeId: 'cafe4',
+      cafeName: 'Warnet Premium',
+      role: 'operator',
+    },
+    {
+      id: 'op5',
+      username: 'operator5',
+      password: 'op123',
+      name: 'Eka Supervisor',
+      cafeId: 'cafe5',
+      cafeName: 'Esports Hub',
+      role: 'operator',
+    },
+  ];
 
   // Mock cafes data
   const cafes: Cafe[] = [
@@ -174,6 +246,13 @@ function App() {
       regularPricePerHour: 8000,
       memberPricePerHour: 6000,
       totalPCs: 30,
+      rules: [
+        'Dilarang merokok di dalam ruangan gaming',
+        'Wajib menjaga kebersihan area PC',
+        'Makanan dan minuman hanya dari kantin warnet',
+        'Dilarang mengakses konten ilegal atau pornografi',
+        'Headset wajib digunakan untuk game dengan audio'
+      ],
     },
     {
       id: 'cafe2',
@@ -183,26 +262,61 @@ function App() {
       regularPricePerHour: 10000,
       memberPricePerHour: 7500,
       totalPCs: 25,
-    },
-  ];
-
-  // Mock operators tied to cafes above (for UI navigation)
-  const operators: Operator[] = [
-    {
-      id: 'op1',
-      username: 'operator1',
-      password: 'password',
-      name: 'Operator CyberArena',
-      cafeId: cafes[0].id,
-      cafeName: cafes[0].name,
+      rules: [
+        'Area bebas asap rokok 100%',
+        'Deposit Rp 50.000 untuk penggunaan perangkat VR',
+        'Maksimal 4 orang per booth untuk party gaming',
+        'Wajib scan member card sebelum menggunakan PC',
+        'Perangkat gaming tidak boleh dipindahkan tanpa izin staff'
+      ],
     },
     {
-      id: 'op2',
-      username: 'operator2',
-      password: 'password',
-      name: 'Operator GameZone',
-      cafeId: cafes[1].id,
-      cafeName: cafes[1].name,
+      id: 'cafe3',
+      name: 'Netplay Station',
+      location: 'Jl. Thamrin No. 88, Jakarta Pusat',
+      image: 'https://images.unsplash.com/photo-1758410473607-e78a23fd6e57?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjeWJlcmNhZmUlMjBjb21wdXRlcnN8ZW58MXx8fHwxNzY0MzM1MzE2fDA&ixlib=rb-4.1.0&q=80&w=1080',
+      regularPricePerHour: 7000,
+      memberPricePerHour: 5500,
+      totalPCs: 20,
+      rules: [
+        'Minimal booking 1 jam untuk weekend',
+        'Dilarang tidur atau berbaring di kursi gaming',
+        'Volume speaker maksimal 50% setelah jam 22:00',
+        'Free 1 soft drink untuk setiap 3 jam bermain',
+        'Parkir sepeda gratis, motor Rp 2.000'
+      ],
+    },
+    {
+      id: 'cafe4',
+      name: 'Warnet Premium',
+      location: 'Jl. MH Thamrin No. 22, Jakarta Pusat',
+      image: 'https://images.unsplash.com/photo-1516691660293-39fdef9f145b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbnRlcm5ldCUyMGNhZmUlMjBuZW9ufGVufDF8fHx8MTc2NDMzNTMxNnww&ixlib=rb-4.1.0&q=80&w=1080',
+      regularPricePerHour: 9000,
+      memberPricePerHour: 7000,
+      totalPCs: 35,
+      rules: [
+        'Kartu identitas wajib dititipkan untuk non-member',
+        'Dilarang install/uninstall software tanpa izin',
+        'Area VIP khusus member premium (lantai 2)',
+        'Overtime dikenakan biaya 150% dari harga normal',
+        'Gratis printing hingga 10 lembar untuk member'
+      ],
+    },
+    {
+      id: 'cafe5',
+      name: 'Esports Hub',
+      location: 'Jl. Rasuna Said No. 5, Jakarta Selatan',
+      image: 'https://images.unsplash.com/photo-1704871132546-d1d3b845ae65?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBzZXR1cCUyMHJnYnxlbnwxfHx8fDE3NjQyMzE2MDJ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      regularPricePerHour: 12000,
+      memberPricePerHour: 9000,
+      totalPCs: 40,
+      rules: [
+        'Tournament room dapat di-booking untuk acara (min. 10 orang)',
+        'Livestreaming diperbolehkan dengan pemberitahuan ke staff',
+        'Coaching session dikenakan biaya tambahan Rp 25.000/jam',
+        'Anak dibawah 12 tahun wajib didampingi orang tua',
+        'Member berhak menggunakan locker pribadi gratis'
+      ],
     },
   ];
 
@@ -237,6 +351,58 @@ function App() {
     return () => clearInterval(interval);
   }, [user]);
 
+  // Save registered users to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('bowar_registered_users', JSON.stringify(registeredUsers));
+  }, [registeredUsers]);
+
+  // Sync logged-in user data with registeredUsers (keep data in sync)
+  // Use ref to track previous registeredUsers to avoid cascading renders
+  const prevRegisteredUsersRef = useRef<RegisteredUser[]>(registeredUsers);
+  const userIdRef = useRef<string | null>(user?.id || null);
+  
+  useEffect(() => {
+    // Update ref when user changes
+    userIdRef.current = user?.id || null;
+  }, [user?.id]);
+  
+  useEffect(() => {
+    // Only sync if registeredUsers actually changed (not just a re-render)
+    if (JSON.stringify(prevRegisteredUsersRef.current) === JSON.stringify(registeredUsers)) {
+      return;
+    }
+    
+    prevRegisteredUsersRef.current = registeredUsers;
+    
+    // Only sync if we have a logged-in user
+    const currentUserId = userIdRef.current;
+    if (currentUserId) {
+      const updatedUserData = registeredUsers.find((u) => u.id === currentUserId);
+      if (updatedUserData) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = updatedUserData;
+        // Use functional update to avoid dependency on user state
+        setUser((currentUser) => {
+          if (!currentUser || currentUser.id !== currentUserId) {
+            return currentUser;
+          }
+          // Only update if cafeWallets changed
+          const userWalletsStr = JSON.stringify(currentUser.cafeWallets);
+          const updatedWalletsStr = JSON.stringify(updatedUserData.cafeWallets);
+          if (userWalletsStr !== updatedWalletsStr) {
+            return userWithoutPassword;
+          }
+          return currentUser;
+        });
+      }
+    }
+  }, [registeredUsers]);
+
+  // Save bookings to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('bowar_bookings', JSON.stringify(bookings));
+  }, [bookings]);
+
   // Realtime booking countdown
   useEffect(() => {
     const interval = setInterval(() => {
@@ -260,49 +426,6 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const getUserBookings = () => {
-    if (!user) return [];
-    return bookings.filter((b) => b.userId === user.id);
-  };
-
-  const registerUser = (newUser: User) => {
-    setUsers((prev) => [...prev, newUser]);
-  };
-
-  const updateMemberWallet = (userId: string, cafeId: string, updates: Partial<CafeWallet>) => {
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id !== userId || !u.cafeWallets) return u;
-        const updatedWallets = u.cafeWallets.map((w) =>
-          w.cafeId === cafeId ? { ...w, ...updates } : w
-        );
-        return { ...u, cafeWallets: updatedWallets };
-      })
-    );
-  };
-
-  const updateBookingStatus = (bookingId: string, status: Booking['status']) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
-    );
-  };
-
-  const findUserByCredentials = (
-    username: string,
-    password: string,
-    role: 'regular' | 'member'
-  ): User | null => {
-    const foundUser =
-      users.find(
-        (u) =>
-          u.username === username &&
-          u.password === password &&
-          u.role === role
-      ) || null;
-
-    return foundUser;
-  };
-
   const addBooking = (booking: Booking) => {
     setBookings((prev) => [...prev, booking]);
   };
@@ -321,6 +444,12 @@ function App() {
     );
   };
 
+  const updateBookingStatus = (bookingId: string, status: 'active' | 'completed' | 'cancelled') => {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
+    );
+  };
+
   const updateWallet = (cafeId: string, minutes: number, isActive: boolean) => {
     setUser((prev) => {
       if (!prev?.cafeWallets) return prev;
@@ -331,7 +460,14 @@ function App() {
           : wallet
       );
 
-      return { ...prev, cafeWallets: updatedWallets };
+      const updatedUser = { ...prev, cafeWallets: updatedWallets };
+
+      // Sync to registeredUsers for persistence
+      setRegisteredUsers((users) =>
+        users.map((u) => (u.id === prev.id ? { ...u, cafeWallets: updatedWallets } : u))
+      );
+
+      return updatedUser;
     });
   };
 
@@ -345,8 +481,29 @@ function App() {
           : wallet
       );
 
-      return { ...prev, cafeWallets: updatedWallets };
+      const updatedUser = { ...prev, cafeWallets: updatedWallets };
+
+      // Sync to registeredUsers for persistence
+      setRegisteredUsers((users) =>
+        users.map((u) => (u.id === prev.id ? { ...u, cafeWallets: updatedWallets } : u))
+      );
+
+      return updatedUser;
     });
+  };
+
+  const updateMemberWallet = (userId: string, cafeId: string, updates: Partial<CafeWallet>) => {
+    setRegisteredUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId && u.cafeWallets) {
+          const updatedWallets = u.cafeWallets.map((wallet) =>
+            wallet.cafeId === cafeId ? { ...wallet, ...updates } : wallet
+          );
+          return { ...u, cafeWallets: updatedWallets };
+        }
+        return u;
+      })
+    );
   };
 
   const addChatMessage = (cafeId: string, message: ChatMessage) => {
@@ -354,6 +511,37 @@ function App() {
       ...prev,
       [cafeId]: [...(prev[cafeId] || []), message],
     }));
+  };
+
+  // Register a new user
+  const registerUser = (user: RegisteredUser) => {
+    setRegisteredUsers((prev) => [...prev, user]);
+  };
+
+  // Find user by credentials for login
+  const findUserByCredentials = (
+    username: string,
+    password: string,
+    role: 'regular' | 'member'
+  ): User | null => {
+    const registered = registeredUsers.find(
+      (u) => u.username === username && u.password === password && u.role === role
+    );
+    
+    if (registered) {
+      // Return user without password
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _password, ...userWithoutPassword } = registered;
+      return userWithoutPassword;
+    }
+    
+    return null;
+  };
+
+  // Get bookings for current logged-in user only
+  const getUserBookings = (): Booking[] => {
+    if (!user) return [];
+    return bookings.filter((booking) => booking.userId === user.id);
   };
 
   // Initialize PCs for a cafe if not already initialized
@@ -420,29 +608,28 @@ function App() {
   }, []);
 
   const contextValue: AppContextType = {
-    users,
-    registeredUsers: users,
     user,
-    operator,
-    operators,
     setUser,
+    operator,
     setOperator,
-    getUserBookings,
     pcStatuses,
     getPCsForCafe,
     cafes,
     bookings,
+    getUserBookings,
     addBooking,
     cancelBooking,
     updateBooking,
     updateBookingStatus,
     updateWallet,
-    updateMemberWallet,
     extendWallet,
+    updateMemberWallet,
     chatMessages,
     addChatMessage,
+    registeredUsers,
     registerUser,
     findUserByCredentials,
+    operators,
   };
 
   return (
@@ -454,6 +641,7 @@ function App() {
               path="/"
               element={user ? <Navigate to="/home" /> : <Navigate to="/login" />}
             />
+            <Route path="/neon-login" element={<NeonLogin />} />
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/register" element={<RegisterScreen />} />
             <Route
@@ -463,6 +651,10 @@ function App() {
             <Route
               path="/cafe/:cafeId"
               element={user ? <CafeDetailsScreen /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/cafe/:cafeId/rules"
+              element={user ? <RulesScreen /> : <Navigate to="/login" />}
             />
             <Route
               path="/cafe/:cafeId/pcs"
@@ -512,7 +704,15 @@ function App() {
               path="/map"
               element={user ? <MapScreen /> : <Navigate to="/login" />}
             />
-            <Route path="/operator/login" element={<OperatorLoginScreen />} />
+            <Route
+              path="/dompet-bowar"
+              element={user ? <DompetBowarScreen /> : <Navigate to="/login" />}
+            />
+            {/* Operator routes */}
+            <Route
+              path="/operator/login"
+              element={operator ? <Navigate to="/operator/dashboard" /> : <OperatorLoginScreen />}
+            />
             <Route
               path="/operator/dashboard"
               element={operator ? <OperatorDashboard /> : <Navigate to="/operator/login" />}

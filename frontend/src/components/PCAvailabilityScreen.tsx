@@ -38,12 +38,8 @@ export function PCAvailabilityScreen() {
       return;
     }
 
-    const pc = pcs.find((p) => p.number === selectedPC);
-    if (pc?.status === 'occupied') {
-      toast.error('PC ini sedang terpakai');
-      return;
-    }
-
+    // Allow booking for both available and occupied PCs
+    // For occupied PCs, the booking will be scheduled for the next available slot
     navigate(`/booking/${cafeId}/${selectedPC}`);
   };
 
@@ -103,9 +99,9 @@ export function PCAvailabilityScreen() {
         </div>
 
         {/* PC Grid */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-6">
+        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-5">
           <h3 className="text-slate-200 mb-4">Pilih PC Anda</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-5 gap-2">
             {pcs.map((pc) => {
               const isSelected = selectedPC === pc.number;
               const isAvailable = pc.status === 'available';
@@ -114,49 +110,53 @@ export function PCAvailabilityScreen() {
                 <button
                   key={pc.id}
                   onClick={() => {
-                    if (isAvailable) {
-                      setSelectedPC(pc.number);
-                    } else {
-                      toast.error(`PC ${pc.number} sedang terpakai`);
+                    setSelectedPC(pc.number);
+                    if (!isAvailable) {
+                      toast.info(`PC ${pc.number} sedang dimainkan. Booking untuk jam berikutnya.`);
                     }
                   }}
-                  disabled={!isAvailable}
                   className={`
-                    aspect-square rounded-2xl p-3 transition-all
+                    aspect-square rounded-xl p-2 transition-all
                     ${
                       isAvailable
                         ? isSelected
                           ? 'bg-gradient-to-br from-blue-500/30 to-purple-500/30 border-2 border-teal-400 shadow-lg shadow-blue-500/30'
-                          : 'bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800'
-                        : 'bg-slate-900/50 border border-red-500/30 cursor-not-allowed opacity-60'
+                          : 'bg-gradient-to-br from-green-500/20 to-green-500/10 border border-green-500/40 hover:border-green-400 hover:from-green-500/30 hover:to-green-500/20'
+                        : isSelected
+                        ? 'bg-gradient-to-br from-amber-500/30 to-orange-500/30 border-2 border-amber-400 shadow-lg shadow-amber-500/30'
+                        : 'bg-slate-900/50 border border-red-500/30 hover:border-amber-500/50 hover:bg-gradient-to-br hover:from-amber-500/10 hover:to-orange-500/10'
                     }
                   `}
                 >
-                  <div className="h-full flex flex-col items-center justify-center gap-2">
+                  <div className="h-full flex flex-col items-center justify-center gap-1">
                     <Monitor
-                      className={`w-6 h-6 ${
+                      className={`w-4 h-4 ${
                         isAvailable
                           ? isSelected
                             ? 'text-teal-400'
-                            : 'text-slate-400'
+                            : 'text-green-400'
+                          : isSelected
+                          ? 'text-amber-400'
                           : 'text-red-400'
                       }`}
                     />
                     <span
-                      className={`text-sm ${
+                      className={`text-xs ${
                         isAvailable
                           ? isSelected
                             ? 'text-teal-300'
-                            : 'text-slate-300'
+                            : 'text-green-300'
+                          : isSelected
+                          ? 'text-amber-300'
                           : 'text-red-300'
                       }`}
                     >
-                      PC {pc.number}
+                      {pc.number}
                     </span>
                     {!isAvailable && pc.remainingMinutes !== undefined && (
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-red-400" />
-                        <span className="text-xs text-red-400 tabular-nums">
+                      <div className="flex items-center gap-0.5">
+                        <Clock className={`w-2.5 h-2.5 ${isSelected ? 'text-amber-400' : 'text-red-400'}`} />
+                        <span className={`text-[10px] tabular-nums ${isSelected ? 'text-amber-400' : 'text-red-400'}`}>
                           {formatTime(pc.remainingMinutes)}
                         </span>
                       </div>
@@ -168,20 +168,83 @@ export function PCAvailabilityScreen() {
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-4">
-          <div className="flex items-center justify-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-400 rounded-full" />
-              <span className="text-slate-300">Tersedia</span>
+        {/* Legend with Detailed Explanations */}
+        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-5 space-y-4">
+          <h3 className="text-slate-200 mb-1">Keterangan Status PC</h3>
+          
+          <div className="space-y-3">
+            {/* Available */}
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-500/20 to-green-500/10 border border-green-500/40 rounded-xl flex items-center justify-center">
+                <Monitor className="w-4 h-4 text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2.5 h-2.5 bg-green-400 rounded-full" />
+                  <span className="text-slate-200 text-sm">PC Tersedia</span>
+                </div>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  PC dapat dibooking dan siap digunakan sekarang
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-400 rounded-full" />
-              <span className="text-slate-300">Terpakai</span>
+
+            {/* Selected Available */}
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500/30 to-purple-500/30 border-2 border-teal-400 rounded-xl flex items-center justify-center">
+                <Monitor className="w-4 h-4 text-teal-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2.5 h-2.5 bg-teal-400 rounded-full" />
+                  <span className="text-slate-200 text-sm">PC Tersedia - Dipilih</span>
+                </div>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  PC yang sedang Anda pilih dan siap dibooking
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-teal-400 rounded-full" />
-              <span className="text-slate-300">Dipilih</span>
+
+            {/* Playing/Occupied */}
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-slate-900/50 border border-red-500/30 rounded-xl flex items-center justify-center opacity-60">
+                <Monitor className="w-4 h-4 text-red-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2.5 h-2.5 bg-red-400 rounded-full" />
+                  <span className="text-slate-200 text-sm">PC Sedang Dimainkan</span>
+                </div>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  PC sedang digunakan. Klik untuk booking jam berikutnya
+                </p>
+              </div>
+            </div>
+
+            {/* Selected Occupied */}
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-amber-500/30 to-orange-500/30 border-2 border-amber-400 rounded-xl flex items-center justify-center">
+                <Monitor className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2.5 h-2.5 bg-amber-400 rounded-full" />
+                  <span className="text-slate-200 text-sm">PC Sedang Dimainkan - Dipilih</span>
+                </div>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  Booking untuk jam berikutnya setelah pemain selesai
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Note */}
+          <div className="pt-3 border-t border-slate-800/50">
+            <div className="flex items-start gap-2">
+              <Clock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-slate-400 text-xs leading-relaxed">
+                <span className="text-amber-300">💡 Fitur Baru:</span> Anda sekarang bisa booking PC yang sedang dimainkan! Booking Anda akan otomatis dimulai setelah pemain selesai, atau dipindahkan ke PC lain yang tersedia jika terjadi perpanjangan billing.
+              </p>
             </div>
           </div>
         </div>
