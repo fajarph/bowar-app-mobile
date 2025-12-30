@@ -1,7 +1,7 @@
 import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
-import { Gamepad2, MapPin, Clock, Plus, X, Wallet, CreditCard, Building2, Smartphone, CheckCircle } from 'lucide-react';
+import { Gamepad2, MapPin, Clock, Plus, X, Wallet, CreditCard, Building2, Smartphone, CheckCircle, Loader2 } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
 import { toast } from 'sonner';
@@ -188,93 +188,100 @@ export function HomeScreen() {
 
         {/* Warnet Cards Grid */}
         <div className="space-y-4">
-          {context?.cafes.map((cafe) => {
-            const isMemberCafe =
-              context.user?.role === 'member' &&
-              context.user.cafeWallets?.some((w) => w.cafeId === cafe.id);
+          {!context?.cafes || context.cafes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-slate-400 animate-spin mb-4" />
+              <p className="text-slate-400 text-sm">Memuat daftar warnet...</p>
+            </div>
+          ) : (
+            context.cafes.map((cafe) => {
+              const isMemberCafe =
+                context.user?.role === 'member' &&
+                context.user.cafeWallets?.some((w) => w.cafeId === cafe.id);
 
-            return (
-              <div
-                key={cafe.id}
-                onClick={() => navigate(`/cafe/${cafe.id}`)}
-                className="group relative bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 hover:border-blue-500/50 rounded-3xl overflow-hidden transition-all hover:shadow-xl hover:shadow-blue-500/10 cursor-pointer"
-              >
-                {/* Image with overlay */}
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={cafe.image}
-                    alt={cafe.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  {/* Gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
-                  
-                  {/* Member Badge */}
-                  {isMemberCafe && (
-                    <div className="absolute top-4 right-4 bg-gradient-to-r from-blue-500/90 to-purple-500/90 backdrop-blur-xl border border-blue-400/50 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg shadow-blue-500/30">
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                      <span className="text-white text-xs">Member</span>
-                    </div>
-                  )}
+              return (
+                <div
+                  key={cafe.id}
+                  onClick={() => navigate(`/cafe/${cafe.id}`)}
+                  className="group relative bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 hover:border-blue-500/50 rounded-3xl overflow-hidden transition-all hover:shadow-xl hover:shadow-blue-500/10 cursor-pointer"
+                >
+                  {/* Image with overlay */}
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={cafe.image}
+                      alt={cafe.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    {/* Gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
+                    
+                    {/* Member Badge */}
+                    {isMemberCafe && (
+                      <div className="absolute top-4 right-4 bg-gradient-to-r from-blue-500/90 to-purple-500/90 backdrop-blur-xl border border-blue-400/50 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg shadow-blue-500/30">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                        <span className="text-white text-xs">Member</span>
+                      </div>
+                    )}
 
-                  {/* Info overlay */}
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <h3 className="text-slate-100 mb-1">{cafe.name}</h3>
-                    <div className="flex items-start gap-2 mb-3">
-                      <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                      <p className="text-slate-300 text-sm line-clamp-1">{cafe.location}</p>
+                    {/* Info overlay */}
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <h3 className="text-slate-100 mb-1">{cafe.name}</h3>
+                      <div className="flex items-start gap-2 mb-3">
+                        <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-slate-300 text-sm line-clamp-1">{cafe.location}</p>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Details Section */}
+                  <div className="p-5">
+                    {/* Pricing */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-slate-400 text-xs mb-1">Harga Regular</p>
+                        <p className="text-slate-200">
+                          Rp {cafe.regularPricePerHour.toLocaleString()}/jam
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-400 text-xs mb-1">Harga Member</p>
+                        <p className="text-teal-400">
+                          Rp {cafe.memberPricePerHour.toLocaleString()}/jam
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* PC Count */}
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-3 mb-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 text-sm">PC Tersedia</span>
+                        <span className="text-teal-400 tabular-nums">{cafe.totalPCs} Unit</span>
+                      </div>
+                    </div>
+
+                    {/* View in Maps Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Placeholder: would open maps in real app
+                        window.open(
+                          `https://maps.google.com/?q=${encodeURIComponent(cafe.location)}`,
+                          '_blank'
+                        );
+                      }}
+                      className="w-full bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-blue-500/50 text-slate-300 hover:text-blue-300 py-3 rounded-2xl transition-all flex items-center justify-center gap-2 group/btn"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      <span>Lihat di Maps</span>
+                    </button>
+                  </div>
+
+                  {/* Hover Effect */}
+                  <div className="absolute inset-0 border-2 border-blue-500/0 group-hover:border-blue-500/20 rounded-3xl pointer-events-none transition-colors" />
                 </div>
-
-                {/* Details Section */}
-                <div className="p-5">
-                  {/* Pricing */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-slate-400 text-xs mb-1">Harga Regular</p>
-                      <p className="text-slate-200">
-                        Rp {cafe.regularPricePerHour.toLocaleString()}/jam
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-slate-400 text-xs mb-1">Harga Member</p>
-                      <p className="text-teal-400">
-                        Rp {cafe.memberPricePerHour.toLocaleString()}/jam
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* PC Count */}
-                  <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-3 mb-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-300 text-sm">PC Tersedia</span>
-                      <span className="text-teal-400 tabular-nums">{cafe.totalPCs} Unit</span>
-                    </div>
-                  </div>
-
-                  {/* View in Maps Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Placeholder: would open maps in real app
-                      window.open(
-                        `https://maps.google.com/?q=${encodeURIComponent(cafe.location)}`,
-                        '_blank'
-                      );
-                    }}
-                    className="w-full bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-blue-500/50 text-slate-300 hover:text-blue-300 py-3 rounded-2xl transition-all flex items-center justify-center gap-2 group/btn"
-                  >
-                    <MapPin className="w-4 h-4" />
-                    <span>Lihat di Maps</span>
-                  </button>
-                </div>
-
-                {/* Hover Effect */}
-                <div className="absolute inset-0 border-2 border-blue-500/0 group-hover:border-blue-500/20 rounded-3xl pointer-events-none transition-colors" />
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         {/* Empty State */}

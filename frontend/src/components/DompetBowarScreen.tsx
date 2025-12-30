@@ -1,8 +1,9 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownRight, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { getBowarTransactions, topupBowar } from '../services/api';
 
 export function DompetBowarScreen() {
   const navigate = useNavigate();
@@ -11,33 +12,31 @@ export function DompetBowarScreen() {
   const [topUpAmount, setTopUpAmount] = useState('');
 
   const balance = context?.user?.bowarWallet || 0;
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock transaction history
-  const transactions = [
-    {
-      id: '1',
-      type: 'topup',
-      amount: 100000,
-      description: 'Top Up via Transfer BCA',
-      date: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      id: '2',
-      type: 'payment',
-      amount: 24000,
-      description: 'Booking PC #5 - CyberArena Gaming',
-      date: new Date(Date.now() - 172800000).toISOString(),
-    },
-    {
-      id: '3',
-      type: 'refund',
-      amount: 16000,
-      description: 'Refund - PC tidak tersedia',
-      date: new Date(Date.now() - 259200000).toISOString(),
-    },
-  ];
+  // Load transactions from API
+  useEffect(() => {
+    const loadTransactions = async () => {
+      try {
+        setLoading(true);
+        const response = await getBowarTransactions(1, 20);
+        if (response.data) {
+          setTransactions(response.data);
+        }
+      } catch (error: any) {
+        console.error('Load transactions error:', error);
+        // Keep empty array on error
+        setTransactions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleTopUp = () => {
+    loadTransactions();
+  }, []);
+
+  const handleTopUp = async () => {
     const amount = parseInt(topUpAmount);
     
     if (isNaN(amount) || amount < 10000) {
@@ -50,10 +49,29 @@ export function DompetBowarScreen() {
       return;
     }
 
-    // Simulate top up process
-    toast.success(`Berhasil top up Rp ${amount.toLocaleString()}`);
-    setShowTopUp(false);
-    setTopUpAmount('');
+    try {
+      // TODO: Implement image upload for proof
+      // For now, we'll use a placeholder
+      const response = await topupBowar({
+        amount,
+        description: `Top Up DompetBowar sebesar Rp ${amount.toLocaleString()}`,
+        proofImage: '', // TODO: Implement image upload
+        senderName: context?.user?.username || 'User',
+      });
+
+      toast.success('Permintaan top up berhasil dibuat. Menunggu konfirmasi.');
+      setShowTopUp(false);
+      setTopUpAmount('');
+      
+      // Reload transactions
+      const transactionsResponse = await getBowarTransactions(1, 20);
+      if (transactionsResponse.data) {
+        setTransactions(transactionsResponse.data);
+      }
+    } catch (error: any) {
+      console.error('Topup error:', error);
+      toast.error(error.response?.data?.message || 'Gagal membuat permintaan top up');
+    }
   };
 
   const quickAmounts = [10000, 25000, 50000, 100000, 250000, 500000];
@@ -132,7 +150,11 @@ export function DompetBowarScreen() {
           </div>
           
           <div className="divide-y divide-slate-800/50">
-            {transactions.length > 0 ? (
+            {loading ? (
+              <div className="px-6 py-8 text-center">
+                <p className="text-slate-400 text-sm">Memuat riwayat transaksi...</p>
+              </div>
+            ) : transactions.length > 0 ? (
               transactions.map((tx) => (
                 <div key={tx.id} className="px-6 py-4 hover:bg-slate-800/30 transition-colors">
                   <div className="flex items-start justify-between gap-4">
@@ -155,15 +177,15 @@ export function DompetBowarScreen() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-slate-200 text-sm mb-1">{tx.description}</p>
+                        <p className="text-slate-200 text-sm mb-1">{tx.description || 'Transaksi'}</p>
                         <p className="text-slate-500 text-xs">
-                          {new Date(tx.date).toLocaleDateString('id-ID', {
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('id-ID', {
                             day: 'numeric',
                             month: 'long',
                             year: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit',
-                          })}
+                          }) : '-'}
                         </p>
                       </div>
                     </div>
@@ -172,7 +194,7 @@ export function DompetBowarScreen() {
                         tx.type === 'payment' ? 'text-red-400' : 'text-green-400'
                       }`}
                     >
-                      {tx.type === 'payment' ? '-' : '+'}Rp {tx.amount.toLocaleString()}
+                      {tx.type === 'payment' ? '-' : '+'}Rp {Math.abs(tx.amount || 0).toLocaleString()}
                     </span>
                   </div>
                 </div>

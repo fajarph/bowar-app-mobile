@@ -1,8 +1,9 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppContext, type User } from '../App';
 import { ArrowLeft, Building2, Shield, Info, X, Upload, Check, Wallet, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
+import { getWarnetDetail } from '../services/api';
 
 export function PaymentScreen() {
   const { bookingId } = useParams<{ bookingId: string }>();
@@ -13,9 +14,34 @@ export function PaymentScreen() {
   const [senderName, setSenderName] = useState('');
   const [proofImage, setProofImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [warnetDetail, setWarnetDetail] = useState<{
+    bankAccountNumber?: string | null;
+    bankAccountName?: string | null;
+  } | null>(null);
 
   const booking = context?.bookings.find((b) => b.id === bookingId);
   const cafe = context?.cafes.find((c) => c.id === booking?.cafeId);
+
+  // Load warnet detail from API to get bank account info
+  useEffect(() => {
+    const loadWarnetDetail = async () => {
+      if (!booking?.cafeId) return;
+      
+      try {
+        const response = await getWarnetDetail(Number(booking.cafeId));
+        if (response.data) {
+          setWarnetDetail({
+            bankAccountNumber: response.data.bankAccountNumber,
+            bankAccountName: response.data.bankAccountName,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load warnet detail:', error);
+      }
+    };
+
+    loadWarnetDetail();
+  }, [booking?.cafeId]);
 
   const pricePerHour =
     context?.user?.role === 'member' &&
@@ -328,11 +354,19 @@ export function PaymentScreen() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Nomor Rekening</span>
-                  <span className="text-cyan-400 font-mono text-lg">1234567890</span>
+                  {warnetDetail?.bankAccountNumber ? (
+                    <span className="text-cyan-400 font-mono text-lg">{warnetDetail.bankAccountNumber}</span>
+                  ) : (
+                    <span className="text-slate-500 text-sm italic">Belum tersedia</span>
+                  )}
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Atas Nama</span>
-                  <span className="text-slate-200 font-medium">PT Bowar Indonesia</span>
+                  {warnetDetail?.bankAccountName ? (
+                    <span className="text-slate-200 font-medium">{warnetDetail.bankAccountName}</span>
+                  ) : (
+                    <span className="text-slate-500 text-sm italic">Belum tersedia</span>
+                  )}
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Jumlah Transfer</span>

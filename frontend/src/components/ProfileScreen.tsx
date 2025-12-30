@@ -11,6 +11,9 @@ export function ProfileScreen() {
 
   const handleLogout = () => {
     context?.setUser(null);
+    // Clear localStorage
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
     toast.success('👋 Anda berhasil keluar dari Bowar.');
     navigate('/login');
   };

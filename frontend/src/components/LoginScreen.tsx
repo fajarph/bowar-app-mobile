@@ -8,7 +8,7 @@ import {
   Crown,
 } from "lucide-react";
 import { toast } from "sonner";
-import { login } from "../services/api";
+import { login, getUserProfile } from "../services/api";
 
 export function LoginScreen() {
   const [username, setUsername] = useState("");
@@ -42,10 +42,37 @@ export function LoginScreen() {
         email: backendUser.email,
         password: "", // tidak disimpan
         role,
+        avatar: backendUser.avatar || undefined,
+        bowarWallet: backendUser.bowarWallet || 0,
         credits: backendUser.credits ?? 0,
       };
 
       context?.setUser(frontendUser);
+      
+      // Also save to localStorage for persistence
+      localStorage.setItem('auth_user', JSON.stringify(frontendUser));
+
+      // Load full profile to get latest data including avatar and cafeWallets
+      try {
+        const profileResponse = await getUserProfile();
+        if (profileResponse.data) {
+          const profileData = profileResponse.data;
+          const fullUser = {
+            id: String(profileData.id),
+            username: profileData.username,
+            email: profileData.email,
+            role: profileData.role,
+            avatar: profileData.avatar,
+            bowarWallet: profileData.bowarWallet || 0,
+            cafeWallets: profileData.cafeWallets || undefined,
+          };
+          context?.setUser(fullUser);
+          localStorage.setItem('auth_user', JSON.stringify(fullUser));
+        }
+      } catch (profileError) {
+        console.error('Failed to load profile after login:', profileError);
+        // Continue anyway with basic user data
+      }
 
       toast.success("Login berhasil! Selamat datang di Bowar.");
       navigate("/home");

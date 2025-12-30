@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { getUserProfile, getWarnets } from './services/api';
 import { LoginScreen } from './components/LoginScreen';
 import { RegisterScreen } from './components/RegisterScreen';
 import { HomeScreen } from './components/HomeScreen';
@@ -109,7 +110,29 @@ import { AppContext, type AppContextType } from './contexts/AppContext';
 export { AppContext };
 
 function App() {
-  const [user, setUser] = useState<User | null>(null);
+  // Load user from localStorage on app start
+  const getInitialUser = (): User | null => {
+    const stored = localStorage.getItem('auth_user');
+    if (stored) {
+      try {
+        const userData = JSON.parse(stored);
+        return {
+          id: userData.id,
+          username: userData.username,
+          email: userData.email,
+          role: userData.role,
+          avatar: userData.avatar,
+          bowarWallet: userData.bowarWallet || 0,
+          cafeWallets: userData.cafeWallets || undefined,
+        };
+      } catch (e) {
+        console.error('Failed to parse stored user:', e);
+      }
+    }
+    return null;
+  };
+
+  const [user, setUser] = useState<User | null>(getInitialUser());
   const [operator, setOperator] = useState<Operator | null>(null);
   
   // Load bookings from localStorage
@@ -128,6 +151,9 @@ function App() {
   const [bookings, setBookings] = useState<Booking[]>(getInitialBookings());
   const [chatMessages, setChatMessages] = useState<{ [cafeId: string]: ChatMessage[] }>({});
   const [pcStatuses, setPcStatuses] = useState<{ [cafeId: string]: PCStatus[] }>({});
+  
+  // Load cafes (warnets) from API - state untuk menyimpan warnets dari database
+  const [cafes, setCafes] = useState<Cafe[]>([]);
   
   // Load registered users from localStorage or use defaults
   // Use lazy initializer to avoid calling Date.now() during render
@@ -236,89 +262,7 @@ function App() {
     },
   ];
 
-  // Mock cafes data
-  const cafes: Cafe[] = [
-    {
-      id: 'cafe1',
-      name: 'CyberArena Gaming',
-      location: 'Jl. Sudirman No. 45, Jakarta Pusat',
-      image: 'https://images.unsplash.com/photo-1708065342541-c54362d52a32?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBjYWZlJTIwaW50ZXJpb3J8ZW58MXx8fHwxNzY0MzA5MjQ1fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 8000,
-      memberPricePerHour: 6000,
-      totalPCs: 30,
-      rules: [
-        'Dilarang merokok di dalam ruangan gaming',
-        'Wajib menjaga kebersihan area PC',
-        'Makanan dan minuman hanya dari kantin warnet',
-        'Dilarang mengakses konten ilegal atau pornografi',
-        'Headset wajib digunakan untuk game dengan audio'
-      ],
-    },
-    {
-      id: 'cafe2',
-      name: 'GameZone Elite',
-      location: 'Jl. Gatot Subroto No. 12, Jakarta Selatan',
-      image: 'https://images.unsplash.com/photo-1726442116417-de02f3116eed?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxlc3BvcnRzJTIwZ2FtaW5nJTIwcm9vbXxlbnwxfHx8fDE3NjQzMzUzMTV8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 10000,
-      memberPricePerHour: 7500,
-      totalPCs: 25,
-      rules: [
-        'Area bebas asap rokok 100%',
-        'Deposit Rp 50.000 untuk penggunaan perangkat VR',
-        'Maksimal 4 orang per booth untuk party gaming',
-        'Wajib scan member card sebelum menggunakan PC',
-        'Perangkat gaming tidak boleh dipindahkan tanpa izin staff'
-      ],
-    },
-    {
-      id: 'cafe3',
-      name: 'Netplay Station',
-      location: 'Jl. Thamrin No. 88, Jakarta Pusat',
-      image: 'https://images.unsplash.com/photo-1758410473607-e78a23fd6e57?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjeWJlcmNhZmUlMjBjb21wdXRlcnN8ZW58MXx8fHwxNzY0MzM1MzE2fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 7000,
-      memberPricePerHour: 5500,
-      totalPCs: 20,
-      rules: [
-        'Minimal booking 1 jam untuk weekend',
-        'Dilarang tidur atau berbaring di kursi gaming',
-        'Volume speaker maksimal 50% setelah jam 22:00',
-        'Free 1 soft drink untuk setiap 3 jam bermain',
-        'Parkir sepeda gratis, motor Rp 2.000'
-      ],
-    },
-    {
-      id: 'cafe4',
-      name: 'Warnet Premium',
-      location: 'Jl. MH Thamrin No. 22, Jakarta Pusat',
-      image: 'https://images.unsplash.com/photo-1516691660293-39fdef9f145b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbnRlcm5ldCUyMGNhZmUlMjBuZW9ufGVufDF8fHx8MTc2NDMzNTMxNnww&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 9000,
-      memberPricePerHour: 7000,
-      totalPCs: 35,
-      rules: [
-        'Kartu identitas wajib dititipkan untuk non-member',
-        'Dilarang install/uninstall software tanpa izin',
-        'Area VIP khusus member premium (lantai 2)',
-        'Overtime dikenakan biaya 150% dari harga normal',
-        'Gratis printing hingga 10 lembar untuk member'
-      ],
-    },
-    {
-      id: 'cafe5',
-      name: 'Esports Hub',
-      location: 'Jl. Rasuna Said No. 5, Jakarta Selatan',
-      image: 'https://images.unsplash.com/photo-1704871132546-d1d3b845ae65?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBzZXR1cCUyMHJnYnxlbnwxfHx8fDE3NjQyMzE2MDJ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      regularPricePerHour: 12000,
-      memberPricePerHour: 9000,
-      totalPCs: 40,
-      rules: [
-        'Tournament room dapat di-booking untuk acara (min. 10 orang)',
-        'Livestreaming diperbolehkan dengan pemberitahuan ke staff',
-        'Coaching session dikenakan biaya tambahan Rp 25.000/jam',
-        'Anak dibawah 12 tahun wajib didampingi orang tua',
-        'Member berhak menggunakan locker pribadi gratis'
-      ],
-    },
-  ];
+  // Cafes data sekarang di-load dari API (lihat useEffect di bawah)
 
   // Realtime wallet countdown
   useEffect(() => {
@@ -350,6 +294,89 @@ function App() {
 
     return () => clearInterval(interval);
   }, [user]);
+
+  // Load warnets (cafes) from API on app start
+  useEffect(() => {
+    const loadWarnets = async () => {
+      try {
+        const warnetsData = await getWarnets();
+        if (warnetsData && Array.isArray(warnetsData)) {
+          // Map backend warnet data to frontend Cafe format
+          interface WarnetResponse {
+            id: number;
+            name: string;
+            location?: string;
+            address?: string;
+            image?: string | null;
+            regularPricePerHour: number;
+            memberPricePerHour: number;
+            totalPCs: number;
+          }
+          
+          const mappedCafes: Cafe[] = warnetsData.map((warnet: WarnetResponse) => ({
+            id: String(warnet.id),
+            name: warnet.name,
+            location: warnet.location || warnet.address || '',
+            image: warnet.image || 'https://images.unsplash.com/photo-1708065342541-c54362d52a32?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBjYWZlJTIwaW50ZXJpb3J8ZW58MXx8fHwxNzY0MzA5MjQ1fDA&ixlib=rb-4.1.0&q=80&w=1080',
+            regularPricePerHour: warnet.regularPricePerHour || 0,
+            memberPricePerHour: warnet.memberPricePerHour || 0,
+            totalPCs: warnet.totalPCs || 0,
+            rules: [], // Rules will be loaded when viewing details
+          }));
+          setCafes(mappedCafes);
+        }
+      } catch (error) {
+        console.error('Failed to load warnets:', error);
+        // Keep empty array on error
+        setCafes([]);
+      }
+    };
+
+    loadWarnets();
+  }, []); // Only run once on mount
+
+  // Load user profile from API when app starts (if user is logged in)
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      const token = localStorage.getItem('auth_token');
+      const storedUser = localStorage.getItem('auth_user');
+      
+      if (token && storedUser) {
+        try {
+          // Load full profile from API to get latest data including avatar
+          const response = await getUserProfile();
+          if (response.data) {
+            const profileData = response.data;
+            const updatedUser: User = {
+              id: String(profileData.id),
+              username: profileData.username,
+              email: profileData.email,
+              role: profileData.role,
+              avatar: profileData.avatar,
+              bowarWallet: profileData.bowarWallet || 0,
+              cafeWallets: profileData.cafeWallets || undefined,
+            };
+            setUser(updatedUser);
+            // Update localStorage with latest data
+            localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+          }
+        } catch (error) {
+          console.error('Failed to load user profile:', error);
+          // If token is invalid, clear user
+          if (error && typeof error === 'object' && 'response' in error) {
+            const axiosError = error as { response?: { status?: number } };
+            if (axiosError.response?.status === 401) {
+              setUser(null);
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('auth_user');
+            }
+          }
+        }
+      }
+    };
+
+    loadUserProfile();
+  }, []); // Only run once on mount
 
   // Save registered users to localStorage whenever they change
   useEffect(() => {
@@ -386,12 +413,12 @@ function App() {
           if (!currentUser || currentUser.id !== currentUserId) {
             return currentUser;
           }
-          // Only update if cafeWallets changed
+        // Only update if cafeWallets changed
           const userWalletsStr = JSON.stringify(currentUser.cafeWallets);
           const updatedWalletsStr = JSON.stringify(updatedUserData.cafeWallets);
           if (userWalletsStr !== updatedWalletsStr) {
             return userWithoutPassword;
-          }
+        }
           return currentUser;
         });
       }

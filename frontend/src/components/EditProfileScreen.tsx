@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { ArrowLeft, User, Mail, Phone, Camera, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { updateProfile } from '../services/api';
 
 export function EditProfileScreen() {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ export function EditProfileScreen() {
     }
   };
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     if (!username || !email) {
       toast.error('Silakan isi semua field yang diperlukan');
       return;
@@ -54,18 +55,41 @@ export function EditProfileScreen() {
       return;
     }
 
-    // Update user
-    if (context?.user) {
-      context.setUser({
-        ...context.user,
+    try {
+      // Check if user is logged in
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Silakan login terlebih dahulu');
+        navigate('/login');
+        return;
+      }
+
+      // Update profile via API
+      const response = await updateProfile({
         username,
         email,
-        avatar,
+        avatar: avatar || undefined,
       });
-    }
 
-    toast.success('✅ Profil berhasil diperbarui!');
-    navigate('/profile');
+      // Update user in context
+      if (context?.user && response.data) {
+        const updatedUser = {
+          ...context.user,
+          username: response.data.username || username,
+          email: response.data.email || email,
+          avatar: response.data.avatar || avatar,
+        };
+        context.setUser(updatedUser);
+        // Update localStorage with latest data
+        localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+      }
+
+      toast.success('✅ Profil berhasil diperbarui!');
+      navigate('/profile');
+    } catch (error: any) {
+      console.error('Update profile error:', error);
+      toast.error(error.response?.data?.message || 'Gagal memperbarui profil');
+    }
   };
 
   return (

@@ -1,6 +1,7 @@
-import { useContext } from "react";
+import { useContext, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppContext } from "../App";
+import { getWarnetDetail } from "../services/api";
 import {
   ArrowLeft,
   MapPin,
@@ -16,8 +17,41 @@ export function CafeDetailsScreen() {
   const { cafeId } = useParams<{ cafeId: string }>();
   const navigate = useNavigate();
   const context = useContext(AppContext);
+  const [warnetDetail, setWarnetDetail] = useState<{
+    description?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    operatingHours?: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const cafe = context?.cafes.find((c) => c.id === cafeId);
+
+  // Load warnet detail from API
+  useEffect(() => {
+    const loadWarnetDetail = async () => {
+      if (!cafeId) return;
+      
+      try {
+        setLoading(true);
+        const response = await getWarnetDetail(Number(cafeId));
+        if (response.data) {
+          setWarnetDetail({
+            description: response.data.description,
+            phone: response.data.phone,
+            email: response.data.email,
+            operatingHours: response.data.operatingHours,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load warnet detail:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadWarnetDetail();
+  }, [cafeId]);
 
   if (!cafe) {
     return (
@@ -96,13 +130,20 @@ export function CafeDetailsScreen() {
           <h3 className="text-slate-200 mb-3">
             Tentang Warnet Ini
           </h3>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            Rasakan pengalaman gaming premium dengan hardware kelas atas dan
-            koneksi internet ultra-cepat. Sempurna untuk
-            gaming kompetitif, streaming, dan bermain santai. Kursi
-            gaming kami yang nyaman dan setup RGB menciptakan
-            atmosfer gaming yang sempurna.
-          </p>
+          {loading ? (
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-400 text-sm">Memuat deskripsi...</p>
+            </div>
+          ) : warnetDetail?.description ? (
+            <p className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">
+              {warnetDetail.description}
+            </p>
+          ) : (
+            <p className="text-slate-500 text-sm italic">
+              Deskripsi belum tersedia
+            </p>
+          )}
         </div>
 
         {/* PC Specifications */}
