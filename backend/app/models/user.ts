@@ -10,6 +10,8 @@ import Warnet from './warnet.js'
 import Booking from './booking.js'
 import Payment from './payment.js'
 import ChatMessage from './chat_message.js'
+import CafeWallet from './cafe_wallet.js'
+import BowarTransaction from './bowar_transaction.js'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email', 'username'],
@@ -35,6 +37,12 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare warnet_id: number | null
 
+  @column()
+  declare bowar_wallet: number
+
+  @column()
+  declare avatar: string | null
+
   @belongsTo(() => Warnet, {
     foreignKey: 'warnet_id',
   })
@@ -59,6 +67,16 @@ export default class User extends compose(BaseModel, AuthFinder) {
     foreignKey: 'sender_id',
   })
   declare sentMessages: HasMany<typeof ChatMessage>
+
+  @hasMany(() => CafeWallet, {
+    foreignKey: 'user_id',
+  })
+  declare cafeWallets: HasMany<typeof CafeWallet>
+
+  @hasMany(() => BowarTransaction, {
+    foreignKey: 'user_id',
+  })
+  declare bowarTransactions: HasMany<typeof BowarTransaction>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

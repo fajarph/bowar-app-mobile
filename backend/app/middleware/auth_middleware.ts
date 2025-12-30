@@ -19,7 +19,26 @@ export default class AuthMiddleware {
       guards?: (keyof Authenticators)[]
     } = {}
   ) {
-    await ctx.auth.authenticateUsing(options.guards, { loginRoute: this.redirectTo })
-    return next()
+    try {
+      // Use 'api' guard by default if no guard specified
+      const guards = options.guards || ['api']
+      
+      // Debug: log auth attempt
+      const authHeader = ctx.request.header('authorization')
+      if (!authHeader) {
+        console.warn('No Authorization header found in request')
+        return ctx.response.unauthorized({
+          message: 'Silakan login terlebih dahulu',
+        })
+      }
+      
+      await ctx.auth.authenticateUsing(guards, { loginRoute: this.redirectTo })
+      return next()
+    } catch (error: any) {
+      console.error('Auth middleware error:', error.message)
+      return ctx.response.unauthorized({
+        message: 'Token tidak valid atau telah kedaluwarsa. Silakan login kembali.',
+      })
+    }
   }
 }

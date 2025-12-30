@@ -1,0 +1,51 @@
+import { DateTime } from 'luxon'
+import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
+import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import User from './user.js'
+import Booking from './booking.js'
+
+export default class BowarTransaction extends BaseModel {
+  @column({ isPrimary: true })
+  declare id: number
+
+  @column()
+  declare user_id: number
+
+  @column()
+  declare type: 'topup' | 'payment' | 'refund'
+
+  @column()
+  declare amount: number
+
+  @column()
+  declare description: string | null
+
+  @column()
+  declare booking_id: number | null
+
+  @column()
+  declare status: 'pending' | 'completed' | 'failed'
+
+  @column()
+  declare proof_image: string | null
+
+  @column()
+  declare sender_name: string | null
+
+  @belongsTo(() => User, {
+    foreignKey: 'user_id',
+  })
+  declare user: BelongsTo<typeof User>
+
+  @belongsTo(() => Booking, {
+    foreignKey: 'booking_id',
+  })
+  declare booking: BelongsTo<typeof Booking> | null
+
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime
+}
+

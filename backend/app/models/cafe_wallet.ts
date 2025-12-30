@@ -1,29 +1,36 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
-
+import User from './user.js'
 import Warnet from './warnet.js'
 
-export default class Rule extends BaseModel {
+export default class CafeWallet extends BaseModel {
   @column({ isPrimary: true })
   declare id: number
+
+  @column()
+  declare user_id: number
 
   @column()
   declare warnet_id: number
 
   @column()
-  declare code: string
+  declare remaining_minutes: number
 
   @column()
-  declare description: string | null
+  declare is_active: boolean
 
-  @column()
-  declare value: string
+  @column.dateTime()
+  declare last_updated: DateTime
 
-  @column()
-  declare rule_text: string | null
+  @belongsTo(() => User, {
+    foreignKey: 'user_id',
+  })
+  declare user: BelongsTo<typeof User>
 
-  @belongsTo(() => Warnet)
+  @belongsTo(() => Warnet, {
+    foreignKey: 'warnet_id',
+  })
   declare warnet: BelongsTo<typeof Warnet>
 
   @column.dateTime({ autoCreate: true })
@@ -32,3 +39,4 @@ export default class Rule extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 }
+

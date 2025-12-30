@@ -287,6 +287,8 @@ export default class AuthController {
           username: user.username,
           email: user.email,
           role: user.role,
+          avatar: user.avatar,
+          bowarWallet: user.bowar_wallet || 0,
         },
         token,
       })

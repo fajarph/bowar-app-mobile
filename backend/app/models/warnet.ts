@@ -5,6 +5,7 @@ import User from './user.js'
 import Pc from './pc.js'
 import Booking from './booking.js'
 import ChatMessage from './chat_message.js'
+import CafeWallet from './cafe_wallet.js'
 
 export default class Warnet extends BaseModel {
   @column({ isPrimary: true })
@@ -43,6 +44,15 @@ export default class Warnet extends BaseModel {
   @column()
   declare longitude: number | null
 
+  @column()
+  declare image: string | null
+
+  @column()
+  declare bank_account_number: string | null
+
+  @column()
+  declare bank_account_name: string | null
+
   @hasMany(() => User, {
     foreignKey: 'warnet_id',
   })
@@ -62,6 +72,11 @@ export default class Warnet extends BaseModel {
     foreignKey: 'warnet_id',
   })
   declare chatMessages: HasMany<typeof ChatMessage>
+
+  @hasMany(() => CafeWallet, {
+    foreignKey: 'warnet_id',
+  })
+  declare cafeWallets: HasMany<typeof CafeWallet>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

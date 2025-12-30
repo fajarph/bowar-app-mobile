@@ -13,6 +13,10 @@ import { middleware } from './kernel.js'
 const RegisterController = () => import('../app/controllers/auth/register_controller.js')
 const LoginController = () => import('../app/controllers/auth/login_controller.js')
 const WarnetController = () => import('../app/controllers/warnetController.js')
+const UserController = () => import('../app/controllers/user_controller.js')
+const CafeWalletController = () => import('../app/controllers/cafe_wallet_controller.js')
+const BowarTransactionController = () =>
+  import('../app/controllers/bowar_transaction_controller.js')
 
 router.get('/', async () => {
   return {
@@ -38,3 +42,43 @@ router.post('/login', [LoginController, 'login'])
 // Warnet Routes
 router.get('/warnets', [WarnetController, 'index'])
 router.get('/warnets/:id', [WarnetController, 'show'])
+router.get('/warnets/:id/rules', [WarnetController, 'rules'])
+
+// User Routes (Protected)
+router.get('/profile', [UserController, 'profile']).use(middleware.auth())
+router.patch('/profile', [UserController, 'update']).use(middleware.auth())
+router.get('/profile/wallets', [UserController, 'wallets']).use(middleware.auth())
+router.get('/users/:id', [UserController, 'show'])
+
+// Cafe Wallet Routes (Protected - for members)
+router.get('/cafe-wallets', [CafeWalletController, 'index']).use(middleware.auth())
+router.get('/cafe-wallets/:warnetId', [CafeWalletController, 'show']).use(middleware.auth())
+router.post('/cafe-wallets', [CafeWalletController, 'store']).use(middleware.auth())
+router
+  .patch('/cafe-wallets/:id/activate', [CafeWalletController, 'activate'])
+  .use(middleware.auth())
+router
+  .patch('/cafe-wallets/:id/deactivate', [CafeWalletController, 'deactivate'])
+  .use(middleware.auth())
+router
+  .patch('/cafe-wallets/:id/update-time', [CafeWalletController, 'updateTime'])
+  .use(middleware.auth())
+
+// Bowar Transaction Routes (Protected)
+router.get('/bowar-transactions', [BowarTransactionController, 'index']).use(middleware.auth())
+router.get('/bowar-transactions/:id', [BowarTransactionController, 'show']).use(middleware.auth())
+router
+  .post('/bowar-transactions/topup', [BowarTransactionController, 'topup'])
+  .use(middleware.auth())
+router
+  .post('/bowar-transactions/payment', [BowarTransactionController, 'payment'])
+  .use(middleware.auth())
+router
+  .post('/bowar-transactions/refund', [BowarTransactionController, 'refund'])
+  .use(middleware.auth())
+router
+  .patch('/bowar-transactions/:id/approve', [BowarTransactionController, 'approve'])
+  .use(middleware.auth())
+router
+  .patch('/bowar-transactions/:id/reject', [BowarTransactionController, 'reject'])
+  .use(middleware.auth())
