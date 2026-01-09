@@ -33,6 +33,13 @@ export function LoginScreen() {
       const backendUser = response.user;
 
       // ✅ MAPPING ROLE BACKEND → FRONTEND (TYPE-SAFE)
+      // Operator tidak bisa login di halaman customer login
+      if (backendUser.role === 'operator') {
+        toast.error('Operator harus login di halaman operator');
+        navigate('/operator/login');
+        return;
+      }
+
       const role: "regular" | "member" =
         backendUser.role === "member" ? "member" : "regular";
 
@@ -44,7 +51,6 @@ export function LoginScreen() {
         role,
         avatar: backendUser.avatar || undefined,
         bowarWallet: backendUser.bowarWallet || 0,
-        credits: backendUser.credits ?? 0,
       };
 
       context?.setUser(frontendUser);
@@ -57,6 +63,28 @@ export function LoginScreen() {
         const profileResponse = await getUserProfile();
         if (profileResponse.data) {
           const profileData = profileResponse.data;
+          
+          // Map cafeWallets to ensure cafeId is string format
+          const mappedCafeWallets = profileData.cafeWallets
+            ? profileData.cafeWallets.map((wallet: any) => ({
+                cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+                cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+                isActive: wallet.isActive || wallet.is_active || false,
+                lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+              }))
+            : undefined;
+          
+          // Debug logging - removed to prevent spam
+          // Uncomment below if needed for debugging:
+          // console.log('[LoginScreen] Profile Loaded After Login:', {
+          //   userId: profileData.id,
+          //   username: profileData.username,
+          //   role: profileData.role,
+          //   cafeWalletsCount: mappedCafeWallets?.length || 0,
+          //   cafeWallets: mappedCafeWallets?.map((w: { cafeId: string; cafeName: string }) => ({ cafeId: w.cafeId, cafeName: w.cafeName }))
+          // });
+          
           const fullUser = {
             id: String(profileData.id),
             username: profileData.username,
@@ -64,7 +92,7 @@ export function LoginScreen() {
             role: profileData.role,
             avatar: profileData.avatar,
             bowarWallet: profileData.bowarWallet || 0,
-            cafeWallets: profileData.cafeWallets || undefined,
+            cafeWallets: mappedCafeWallets,
           };
           context?.setUser(fullUser);
           localStorage.setItem('auth_user', JSON.stringify(fullUser));

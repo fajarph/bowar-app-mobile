@@ -1,6 +1,7 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
+import type { RegisteredUser, CafeWallet } from '../../App';
 import { Monitor, User, LogIn, LogOut, Clock, Crown, Search } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
@@ -15,22 +16,19 @@ export function OperatorPCGrid() {
   const [memberSearch, setMemberSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'occupied'>('all');
 
-  if (!operator) {
-    navigate('/operator/login');
-    return null;
-  }
-
-  const cafe = context?.cafes.find((c) => c.id === operator.cafeId);
+  const cafe = context?.cafes.find((c) => c.id === operator?.cafeId);
   const totalPCs = cafe?.totalPCs || 50;
 
   // Get active bookings for this cafe
-  const activeBookings = context?.bookings.filter(
-    (b) => b.cafeId === operator.cafeId && b.status === 'active'
-  ) || [];
+  const activeBookings = useMemo(() => {
+    return context?.bookings.filter(
+      (b) => b.cafeId === operator?.cafeId && b.status === 'active'
+    ) || [];
+  }, [context?.bookings, operator?.cafeId]);
 
   // Get cafe members
   const cafeMembers = context?.registeredUsers.filter((u) =>
-    u.cafeWallets?.some((w) => w.cafeId === operator.cafeId)
+    u.cafeWallets?.some((w) => w.cafeId === operator?.cafeId)
   ) || [];
 
   // Filter members by search
@@ -41,11 +39,11 @@ export function OperatorPCGrid() {
   );
 
   // Get PC status
-  const getPCStatus = (pcNum: number) => {
+  const getPCStatus = useCallback((pcNum: number) => {
     const booking = activeBookings.find((b) => b.pcNumber === pcNum);
     if (booking) {
       const user = context?.registeredUsers.find((u) => u.id === booking.userId);
-      const memberWallet = user?.cafeWallets?.find((w) => w.cafeId === operator.cafeId);
+      const memberWallet = user?.cafeWallets?.find((w) => w.cafeId === operator?.cafeId);
       return {
         status: 'occupied' as const,
         user,
@@ -55,20 +53,20 @@ export function OperatorPCGrid() {
       };
     }
     return { status: 'available' as const };
-  };
+  }, [activeBookings, context?.registeredUsers, operator?.cafeId]);
 
-  const handlePCClick = (pcNum: number) => {
+  const handlePCClick = useCallback((pcNum: number) => {
     setSelectedPC(pcNum);
     const pcStatus = getPCStatus(pcNum);
     if (pcStatus.status === 'available') {
       setShowLoginDialog(true);
     }
-  };
+  }, [getPCStatus]);
 
-  const handleMemberLogin = (member: any) => {
-    if (selectedPC === null) return;
+  const handleMemberLogin = useCallback((member: RegisteredUser) => {
+    if (selectedPC === null || !operator?.cafeId) return;
 
-    const memberWallet = member.cafeWallets?.find((w: any) => w.cafeId === operator.cafeId);
+    const memberWallet = member.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId);
     
     if (!memberWallet || memberWallet.remainingMinutes <= 0) {
       toast.error('Member tidak memiliki waktu tersimpan. Silakan tambahkan waktu dulu.');
@@ -76,19 +74,22 @@ export function OperatorPCGrid() {
     }
 
     // Create a new active booking
+    // Date.now() is called inside useCallback event handler, not during render
+    const now = Date.now();
+    const currentCafe = context?.cafes.find((c) => c.id === operator.cafeId);
     const newBooking = {
-      id: `booking-${Date.now()}`,
+      id: `booking-${now}`,
       userId: member.id,
       cafeId: operator.cafeId,
-      cafeName: cafe?.name || '',
+      cafeName: currentCafe?.name || '',
       pcNumber: selectedPC,
       date: new Date().toISOString(),
       time: new Date().toTimeString().slice(0, 5),
       duration: Math.floor(memberWallet.remainingMinutes / 60), // Convert to hours
       status: 'active' as const,
       paymentStatus: 'paid' as const,
-      bookedAt: Date.now(),
-      sessionStartTime: Date.now(),
+      bookedAt: now,
+      sessionStartTime: now,
       isSessionActive: true,
     };
 
@@ -97,25 +98,27 @@ export function OperatorPCGrid() {
     // Activate member wallet
     context?.updateMemberWallet(member.id, operator.cafeId, {
       isActive: true,
-      lastUpdated: Date.now(),
+      lastUpdated: now,
     });
 
     toast.success(`${member.username} login ke PC ${selectedPC}`);
     setShowLoginDialog(false);
     setSelectedPC(null);
     setMemberSearch('');
-  };
+  }, [selectedPC, operator, context]);
 
-  const handleMemberLogout = (pcNum: number) => {
+  const handleMemberLogout = useCallback((pcNum: number) => {
     const pcStatus = getPCStatus(pcNum);
-    if (pcStatus.status !== 'occupied' || !pcStatus.user) return;
+    if (pcStatus.status !== 'occupied' || !pcStatus.user || !operator?.cafeId) return;
 
     const memberWallet = pcStatus.user.cafeWallets?.find((w) => w.cafeId === operator.cafeId);
     if (!memberWallet) return;
 
     // Calculate time used (in minutes)
-    const sessionStartTime = pcStatus.booking?.sessionStartTime || Date.now();
-    const timeUsed = Math.floor((Date.now() - sessionStartTime) / 60000); // Convert ms to minutes
+    // Date.now() is called inside useCallback event handler, not during render
+    const now = Date.now();
+    const sessionStartTime = pcStatus.booking?.sessionStartTime || now;
+    const timeUsed = Math.floor((now - sessionStartTime) / 60000); // Convert ms to minutes
 
     // Deduct time from wallet
     const newRemainingMinutes = Math.max(0, memberWallet.remainingMinutes - timeUsed);
@@ -123,7 +126,7 @@ export function OperatorPCGrid() {
     context?.updateMemberWallet(pcStatus.user.id, operator.cafeId, {
       remainingMinutes: newRemainingMinutes,
       isActive: false,
-      lastUpdated: Date.now(),
+      lastUpdated: now,
     });
 
     // Update booking status
@@ -134,7 +137,12 @@ export function OperatorPCGrid() {
     toast.success(
       `${pcStatus.user.username} logout. Waktu digunakan: ${timeUsed} menit. Tersisa: ${newRemainingMinutes} menit.`
     );
-  };
+  }, [getPCStatus, operator, context]);
+
+  if (!operator) {
+    navigate('/operator/login');
+    return null;
+  }
 
   // Filter PCs
   const pcNumbers = Array.from({ length: totalPCs }, (_, i) => i + 1);

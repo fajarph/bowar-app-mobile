@@ -25,13 +25,15 @@ import { OperatorDashboard } from './components/operator/OperatorDashboard';
 import { OperatorPCGrid } from './components/operator/OperatorPCGrid';
 import { OperatorBookings } from './components/operator/OperatorBookings';
 import { OperatorMembers } from './components/operator/OperatorMembers';
+import { OperatorTopups } from './components/operator/OperatorTopups';
+import { OperatorTopupConfirmScreen } from './components/operator/OperatorTopupConfirmScreen';
 
 // Types
 export interface User {
   id: string;
   username: string;
   email: string;
-  role: 'regular' | 'member';
+  role: 'regular' | 'member' | 'operator';
   cafeWallets?: CafeWallet[];
   avatar?: string;
   bowarWallet?: number; // Saldo DompetBowar dalam Rupiah
@@ -116,6 +118,18 @@ function App() {
     if (stored) {
       try {
         const userData = JSON.parse(stored);
+        
+        // Map cafeWallets to ensure cafeId is string format
+        const mappedCafeWallets: CafeWallet[] | undefined = userData.cafeWallets
+          ? userData.cafeWallets.map((wallet: any) => ({
+              cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+              cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+              remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+              isActive: wallet.isActive || wallet.is_active || false,
+              lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+            }))
+          : undefined;
+        
         return {
           id: userData.id,
           username: userData.username,
@@ -123,7 +137,7 @@ function App() {
           role: userData.role,
           avatar: userData.avatar,
           bowarWallet: userData.bowarWallet || 0,
-          cafeWallets: userData.cafeWallets || undefined,
+          cafeWallets: mappedCafeWallets,
         };
       } catch (e) {
         console.error('Failed to parse stored user:', e);
@@ -133,7 +147,21 @@ function App() {
   };
 
   const [user, setUser] = useState<User | null>(getInitialUser());
-  const [operator, setOperator] = useState<Operator | null>(null);
+  
+  // Load operator from localStorage on app start
+  const getInitialOperator = (): Operator | null => {
+    const stored = localStorage.getItem('auth_operator');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse stored operator:', e);
+      }
+    }
+    return null;
+  };
+  
+  const [operator, setOperator] = useState<Operator | null>(getInitialOperator());
   
   // Load bookings from localStorage
   const getInitialBookings = (): Booking[] => {
@@ -336,17 +364,57 @@ function App() {
   }, []); // Only run once on mount
 
   // Load user profile from API when app starts (if user is logged in)
+  const profileLoadedRef = useRef(false);
   useEffect(() => {
     const loadUserProfile = async () => {
       const token = localStorage.getItem('auth_token');
       const storedUser = localStorage.getItem('auth_user');
       
-      if (token && storedUser) {
+      if (token && storedUser && !profileLoadedRef.current) {
+        profileLoadedRef.current = true; // Prevent multiple calls
         try {
           // Load full profile from API to get latest data including avatar
           const response = await getUserProfile();
           if (response.data) {
             const profileData = response.data;
+            
+            // Map cafeWallets to ensure cafeId is string format
+            let mappedCafeWallets: CafeWallet[] | undefined = profileData.cafeWallets
+              ? profileData.cafeWallets.map((wallet: any) => ({
+                  cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+                  cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                  remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+                  isActive: wallet.isActive || wallet.is_active || false,
+                  lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+                }))
+              : undefined;
+            
+            // Fallback: If member has warnet_id but no cafeWallets, create placeholder
+            // This ensures badge "Member" appears even if user hasn't made any payments yet
+            if (profileData.role === 'member' && (!mappedCafeWallets || mappedCafeWallets.length === 0)) {
+              if (profileData.warnet && profileData.warnet.id) {
+                mappedCafeWallets = [{
+                  cafeId: String(profileData.warnet.id),
+                  cafeName: profileData.warnet.name || '',
+                  remainingMinutes: 0,
+                  isActive: false,
+                  lastUpdated: Date.now(),
+                }];
+              }
+            }
+            
+            // Debug logging - only once (removed to prevent spam)
+            // Uncomment below if needed for debugging:
+            // console.log('[App] User Profile Loaded:', {
+            //   userId: profileData.id,
+            //   username: profileData.username,
+            //   role: profileData.role,
+            //   warnetId: profileData.warnet?.id,
+            //   warnetName: profileData.warnet?.name,
+            //   cafeWalletsCount: mappedCafeWallets?.length || 0,
+            //   cafeWallets: mappedCafeWallets?.map(w => ({ cafeId: w.cafeId, cafeName: w.cafeName }))
+            // });
+            
             const updatedUser: User = {
               id: String(profileData.id),
               username: profileData.username,
@@ -354,7 +422,7 @@ function App() {
               role: profileData.role,
               avatar: profileData.avatar,
               bowarWallet: profileData.bowarWallet || 0,
-              cafeWallets: profileData.cafeWallets || undefined,
+              cafeWallets: mappedCafeWallets,
             };
             setUser(updatedUser);
             // Update localStorage with latest data
@@ -362,6 +430,7 @@ function App() {
           }
         } catch (error) {
           console.error('Failed to load user profile:', error);
+          profileLoadedRef.current = false; // Reset on error to allow retry
           // If token is invalid, clear user
           if (error && typeof error === 'object' && 'response' in error) {
             const axiosError = error as { response?: { status?: number } };
@@ -755,6 +824,14 @@ function App() {
             <Route
               path="/operator/members"
               element={operator ? <OperatorMembers /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/topups"
+              element={operator ? <OperatorTopups /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/topups/:topupId/confirm"
+              element={operator ? <OperatorTopupConfirmScreen /> : <Navigate to="/operator/login" />}
             />
           </Routes>
           <Toaster />

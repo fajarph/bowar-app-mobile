@@ -21,15 +21,11 @@ export function OperatorBookings() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  if (!operator) {
-    navigate('/operator/login');
-    return null;
-  }
-
-  const cafe = context?.cafes.find((c) => c.id === operator.cafeId);
+  const cafe = context?.cafes.find((c) => c.id === operator?.cafeId);
 
   // Get all bookings for this cafe
   const cafeBookings = useMemo(() => {
+    if (!operator?.cafeId) return [];
     const bookings = context?.bookings.filter((b) => b.cafeId === operator.cafeId) || [];
     
     // Apply filters
@@ -52,7 +48,26 @@ export function OperatorBookings() {
 
     // Sort by date (newest first)
     return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [context?.bookings, operator.cafeId, filterStatus, searchQuery, context?.registeredUsers]);
+  }, [context?.bookings, operator, filterStatus, searchQuery, context?.registeredUsers]);
+
+  // Statistics
+  const stats = useMemo(() => {
+    if (!operator?.cafeId) {
+      return { total: 0, active: 0, pending: 0, completed: 0 };
+    }
+    const allCafeBookings = context?.bookings.filter((b) => b.cafeId === operator.cafeId) || [];
+    return {
+      total: allCafeBookings.length,
+      active: allCafeBookings.filter((b) => b.status === 'active').length,
+      pending: allCafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length,
+      completed: allCafeBookings.filter((b) => b.status === 'completed').length,
+    };
+  }, [context?.bookings, operator]);
+
+  if (!operator) {
+    navigate('/operator/login');
+    return null;
+  }
 
   const handleConfirmPayment = (bookingId: string) => {
     context?.updateBooking(bookingId, { paymentStatus: 'paid' });
@@ -77,17 +92,6 @@ export function OperatorBookings() {
     if (amount === undefined || amount === null) return 'Rp 0';
     return `Rp ${amount.toLocaleString('id-ID')}`;
   };
-
-  // Statistics
-  const stats = useMemo(() => {
-    const allCafeBookings = context?.bookings.filter((b) => b.cafeId === operator.cafeId) || [];
-    return {
-      total: allCafeBookings.length,
-      active: allCafeBookings.filter((b) => b.status === 'active').length,
-      pending: allCafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length,
-      completed: allCafeBookings.filter((b) => b.status === 'completed').length,
-    };
-  }, [context?.bookings, operator.cafeId]);
 
   return (
     <div className="min-h-screen pb-24 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">

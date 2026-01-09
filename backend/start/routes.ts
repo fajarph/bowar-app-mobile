@@ -17,6 +17,7 @@ const UserController = () => import('../app/controllers/user_controller.js')
 const CafeWalletController = () => import('../app/controllers/cafe_wallet_controller.js')
 const BowarTransactionController = () =>
   import('../app/controllers/bowar_transaction_controller.js')
+const OperatorController = () => import('../app/controllers/operator_controller.js')
 
 router.get('/', async () => {
   return {
@@ -28,6 +29,8 @@ router.get('/', async () => {
 // Register
 router.post('/register/user', [RegisterController, 'registerUser'])
 router.post('/register/member', [RegisterController, 'registerMember'])
+// Operator registration removed - operators should be created by admin only
+// router.post('/register/operator', [RegisterController, 'registerOperator'])
 
 // Login (consistency with register: separate endpoints)
 // router.post('/login/user', [LoginController, 'loginUser'])
@@ -48,6 +51,7 @@ router.get('/warnets/:id/rules', [WarnetController, 'rules'])
 router.get('/profile', [UserController, 'profile']).use(middleware.auth())
 router.patch('/profile', [UserController, 'update']).use(middleware.auth())
 router.get('/profile/wallets', [UserController, 'wallets']).use(middleware.auth())
+router.get('/profile/all-memberships', [UserController, 'allMemberships']).use(middleware.auth())
 router.get('/users/:id', [UserController, 'show'])
 
 // Cafe Wallet Routes (Protected - for members)
@@ -81,4 +85,12 @@ router
   .use(middleware.auth())
 router
   .patch('/bowar-transactions/:id/reject', [BowarTransactionController, 'reject'])
+  .use(middleware.auth())
+
+// Operator Routes (Protected - for operators only)
+router
+  .get('/operator/warnet/:warnetId/members', [OperatorController, 'getMembers'])
+  .use(middleware.auth())
+router
+  .get('/operator/warnet/:warnetId/statistics', [OperatorController, 'getStatistics'])
   .use(middleware.auth())

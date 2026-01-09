@@ -195,9 +195,35 @@ export function HomeScreen() {
             </div>
           ) : (
             context.cafes.map((cafe) => {
-              const isMemberCafe =
-                context.user?.role === 'member' &&
-                context.user.cafeWallets?.some((w) => w.cafeId === cafe.id);
+              // Check if user is member at this cafe
+              // Handle both string and number IDs for compatibility
+              const isMemberCafe = (() => {
+                // Debug logging
+                const userRole = context.user?.role;
+                const hasCafeWallets = context.user?.cafeWallets && context.user.cafeWallets.length > 0;
+                
+                // First check if user is a member role
+                if (userRole !== 'member') {
+                  return false;
+                }
+                
+                // Then check if user has a wallet for this cafe
+                if (!hasCafeWallets) {
+                  return false;
+                }
+                
+                // Check if any wallet matches this cafe ID
+                const matched = context.user?.cafeWallets?.some((w) => {
+                  // Convert both to string for comparison to handle number/string mismatch
+                  const walletCafeId = String(w.cafeId || '');
+                  const currentCafeId = String(cafe.id || '');
+                  const isMatch = walletCafeId === currentCafeId && walletCafeId !== '';
+                  
+                  return isMatch;
+                }) || false;
+                
+                return matched;
+              })();
 
               return (
                 <div
@@ -215,11 +241,11 @@ export function HomeScreen() {
                     {/* Gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
                     
-                    {/* Member Badge */}
+                    {/* Member Badge - Pojok Kanan Atas */}
                     {isMemberCafe && (
-                      <div className="absolute top-4 right-4 bg-gradient-to-r from-blue-500/90 to-purple-500/90 backdrop-blur-xl border border-blue-400/50 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg shadow-blue-500/30">
+                      <div className="absolute top-4 right-4 z-10 bg-gradient-to-r from-blue-500/90 to-purple-500/90 backdrop-blur-xl border border-blue-400/50 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg shadow-blue-500/30">
                         <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                        <span className="text-white text-xs">Member</span>
+                        <span className="text-white text-xs font-medium">Member</span>
                       </div>
                     )}
 
@@ -340,7 +366,19 @@ export function HomeScreen() {
                   <select
                     value={selectedCafeForTime}
                     onChange={(e) => setSelectedCafeForTime(e.target.value)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.focus();
+                    }}
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.focus();
+                    }}
                     className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3 text-slate-200 focus:border-blue-500/50 focus:outline-none transition-colors"
+                    style={{ 
+                      WebkitTapHighlightColor: 'transparent',
+                      touchAction: 'manipulation'
+                    }}
                   >
                     <option value="">Pilih warnet</option>
                     {context?.user?.cafeWallets?.map((wallet) => {

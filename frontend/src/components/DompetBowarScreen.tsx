@@ -1,40 +1,162 @@
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
-import { ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownRight, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { getBowarTransactions, topupBowar } from '../services/api';
+import { getBowarTransactions, topupBowar, getUserProfile } from '../services/api';
+
+interface BowarTransaction {
+  id: number;
+  type: 'topup' | 'refund' | 'payment';
+  amount: number;
+  description?: string;
+  createdAt?: string;
+  status?: string;
+}
 
 export function DompetBowarScreen() {
   const navigate = useNavigate();
   const context = useContext(AppContext);
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
+  const [proofImage, setProofImage] = useState<string>('');
+  const [senderName, setSenderName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const balance = context?.user?.bowarWallet || 0;
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<BowarTransaction[]>([]);
   const [loading, setLoading] = useState(false);
+  const isLoadingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
+  
+  // Calculate pending topup amount
+  const pendingTopupAmount = transactions
+    .filter(tx => tx.type === 'topup' && tx.status === 'pending')
+    .reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-  // Load transactions from API
+  // Load transactions and refresh balance from API
   useEffect(() => {
-    const loadTransactions = async () => {
+    const userId = context?.user?.id;
+    
+    // Skip if no user or already loading
+    if (!userId || isLoadingRef.current) {
+      return;
+    }
+    
+    // Skip if already loaded for this user (prevent infinite loop)
+    if (hasLoadedRef.current && lastUserIdRef.current === userId) {
+      return;
+    }
+    
+    const loadTransactionsAndBalance = async () => {
       try {
+        isLoadingRef.current = true;
         setLoading(true);
+        lastUserIdRef.current = userId;
+        
         const response = await getBowarTransactions(1, 20);
-        if (response.data) {
+        // Backend returns { message, data: { transactions: [], ... } }
+        if (response.data && Array.isArray(response.data)) {
           setTransactions(response.data);
+        } else if (response.data && response.data.transactions && Array.isArray(response.data.transactions)) {
+          setTransactions(response.data.transactions);
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          setTransactions(response.data.data);
         }
-      } catch (error: any) {
+        
+        // Also refresh balance (only update if different to prevent re-render loop)
+        if (context?.user && context.setUser) {
+          try {
+            const profileResponse = await getUserProfile();
+            if (profileResponse.data) {
+              const profileData = profileResponse.data;
+              
+              // Map cafeWallets
+              const mappedCafeWallets = profileData.cafeWallets
+                ? profileData.cafeWallets.map((wallet: { cafeId?: string; warnet_id?: number; warnetId?: number; cafeName?: string; warnet_name?: string; warnetName?: string; remainingMinutes?: number; remaining_minutes?: number; isActive?: boolean; is_active?: boolean; lastUpdated?: string; last_updated?: string }) => ({
+                    cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+                    cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                    remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+                    isActive: wallet.isActive || wallet.is_active || false,
+                    lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+                  }))
+                : undefined;
+              
+              const newBalance = profileData.bowarWallet || profileData.bowar_wallet || 0;
+              
+              // Only update if balance actually changed (prevent infinite loop)
+              if (context.user.bowarWallet !== newBalance) {
+                context.setUser({
+                  id: String(profileData.id),
+                  username: profileData.username,
+                  email: profileData.email,
+                  role: profileData.role,
+                  avatar: profileData.avatar,
+                  bowarWallet: newBalance,
+                  cafeWallets: mappedCafeWallets,
+                });
+              }
+            }
+          } catch (profileError) {
+            console.error('Failed to refresh balance:', profileError);
+          }
+        }
+        
+        hasLoadedRef.current = true;
+      } catch (error: unknown) {
         console.error('Load transactions error:', error);
         // Keep empty array on error
         setTransactions([]);
+        hasLoadedRef.current = false;
+        lastUserIdRef.current = null;
       } finally {
         setLoading(false);
+        isLoadingRef.current = false;
       }
     };
 
-    loadTransactions();
-  }, []);
+    loadTransactionsAndBalance();
+    
+    // Refresh when page becomes visible (user returns to tab/app) - only if already loaded
+    const handleVisibilityChange = () => {
+      if (!document.hidden && userId && !isLoadingRef.current && hasLoadedRef.current) {
+        // Reset flag to allow refresh
+        hasLoadedRef.current = false;
+        loadTransactionsAndBalance();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [context?.user?.id]); // Only depend on user ID, not the whole user object
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('File harus berupa gambar');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB');
+      return;
+    }
+
+    // Read and preview image
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProofImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleTopUp = async () => {
     const amount = parseInt(topUpAmount);
@@ -49,28 +171,101 @@ export function DompetBowarScreen() {
       return;
     }
 
+    if (!proofImage) {
+      toast.error('Bukti transfer wajib diupload');
+      return;
+    }
+
+    if (!senderName.trim()) {
+      toast.error('Nama pengirim wajib diisi');
+      return;
+    }
+
     try {
-      // TODO: Implement image upload for proof
-      // For now, we'll use a placeholder
+      setIsSubmitting(true);
+      
       const response = await topupBowar({
         amount,
         description: `Top Up DompetBowar sebesar Rp ${amount.toLocaleString()}`,
-        proofImage: '', // TODO: Implement image upload
-        senderName: context?.user?.username || 'User',
+        proofImage: proofImage,
+        senderName: senderName.trim(),
       });
 
-      toast.success('Permintaan top up berhasil dibuat. Menunggu konfirmasi.');
+      toast.success(response.message || 'Permintaan top up berhasil dibuat. Menunggu konfirmasi.');
+      
+      // Reset form
       setShowTopUp(false);
       setTopUpAmount('');
+      setProofImage('');
+      setSenderName('');
       
-      // Reload transactions
-      const transactionsResponse = await getBowarTransactions(1, 20);
-      if (transactionsResponse.data) {
-        setTransactions(transactionsResponse.data);
+      // Reset flags to allow refresh
+      hasLoadedRef.current = false;
+      lastUserIdRef.current = null;
+      
+      // Reload transactions and balance
+      try {
+        isLoadingRef.current = true;
+        setLoading(true);
+        const transactionsResponse = await getBowarTransactions(1, 20);
+        if (transactionsResponse.data && Array.isArray(transactionsResponse.data)) {
+          setTransactions(transactionsResponse.data);
+        } else if (transactionsResponse.data && transactionsResponse.data.data && Array.isArray(transactionsResponse.data.data)) {
+          setTransactions(transactionsResponse.data.data);
+        }
+        
+        // Reload user profile to get updated balance
+        if (context?.user && context.setUser) {
+          try {
+            const profileResponse = await getUserProfile();
+            if (profileResponse.data) {
+              const profileData = profileResponse.data;
+              
+              // Map cafeWallets
+              const mappedCafeWallets = profileData.cafeWallets
+                ? profileData.cafeWallets.map((wallet: { cafeId?: string; warnet_id?: number; warnetId?: number; cafeName?: string; warnet_name?: string; warnetName?: string; remainingMinutes?: number; remaining_minutes?: number; isActive?: boolean; is_active?: boolean; lastUpdated?: string; last_updated?: string }) => ({
+                    cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+                    cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                    remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+                    isActive: wallet.isActive || wallet.is_active || false,
+                    lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+                  }))
+                : undefined;
+              
+              context.setUser({
+                id: String(profileData.id),
+                username: profileData.username,
+                email: profileData.email,
+                role: profileData.role,
+                avatar: profileData.avatar,
+                bowarWallet: profileData.bowarWallet || profileData.bowar_wallet || 0,
+                cafeWallets: mappedCafeWallets,
+              });
+            }
+          } catch (profileError) {
+            console.error('Failed to reload profile:', profileError);
+          }
+        }
+        
+        hasLoadedRef.current = true;
+      } catch (error) {
+        console.error('Failed to reload transactions:', error);
+        hasLoadedRef.current = false;
+      } finally {
+        setLoading(false);
+        isLoadingRef.current = false;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Topup error:', error);
-      toast.error(error.response?.data?.message || 'Gagal membuat permintaan top up');
+      const errorMessage = 
+        (error && typeof error === 'object' && 'response' in error && 
+         error.response && typeof error.response === 'object' && 'data' in error.response &&
+         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
+          ? String(error.response.data.message)
+          : 'Gagal membuat permintaan top up';
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -114,9 +309,21 @@ export function DompetBowarScreen() {
               </div>
               <span className="text-slate-400 text-sm">Saldo Tersedia</span>
             </div>
-            <h2 className="text-4xl text-slate-100 mb-6 tabular-nums">
+            <h2 className="text-4xl text-slate-100 mb-2 tabular-nums">
               Rp {balance.toLocaleString()}
             </h2>
+            {pendingTopupAmount > 0 && (
+              <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+                <p className="text-amber-300 text-xs">
+                  ⏳ Top up pending: <span className="font-semibold">Rp {pendingTopupAmount.toLocaleString()}</span>
+                  <br />
+                  <span className="text-amber-400/80">Saldo akan ditambahkan setelah konfirmasi admin</span>
+                </p>
+              </div>
+            )}
+            {pendingTopupAmount === 0 && (
+              <div className="mb-6" />
+            )}
 
             <button
               onClick={() => setShowTopUp(true)}
@@ -177,7 +384,19 @@ export function DompetBowarScreen() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-slate-200 text-sm mb-1">{tx.description || 'Transaksi'}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-slate-200 text-sm">{tx.description || 'Transaksi'}</p>
+                          {tx.status === 'pending' && (
+                            <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full text-amber-400 text-xs">
+                              Pending
+                            </span>
+                          )}
+                          {tx.status === 'completed' && (
+                            <span className="px-2 py-0.5 bg-green-500/20 border border-green-500/30 rounded-full text-green-400 text-xs">
+                              Selesai
+                            </span>
+                          )}
+                        </div>
                         <p className="text-slate-500 text-xs">
                           {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('id-ID', {
                             day: 'numeric',
@@ -258,10 +477,70 @@ export function DompetBowarScreen() {
                 </div>
               </div>
 
+              {/* Sender Name */}
+              <div>
+                <label className="text-slate-300 text-sm mb-2 block">
+                  Nama Pengirim <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  placeholder="Masukkan nama pengirim"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Proof Image Upload */}
+              <div>
+                <label className="text-slate-300 text-sm mb-2 block">
+                  Bukti Transfer <span className="text-red-400">*</span>
+                </label>
+                {proofImage ? (
+                  <div className="relative">
+                    <img
+                      src={proofImage}
+                      alt="Bukti transfer"
+                      className="w-full h-48 object-cover rounded-2xl border border-slate-700"
+                    />
+                    <button
+                      onClick={() => {
+                        setProofImage('');
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = '';
+                        }
+                      }}
+                      className="absolute top-2 right-2 bg-red-500/90 hover:bg-red-600 text-white p-2 rounded-full transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl p-8 text-center cursor-pointer hover:border-cyan-500/50 transition-colors"
+                  >
+                    <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-slate-300 text-sm mb-1">Klik untuk upload bukti transfer</p>
+                    <p className="text-slate-500 text-xs">JPG, PNG, GIF (Maks. 5MB)</p>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+              </div>
+
               {/* Info */}
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
                 <p className="text-amber-300 text-sm">
                   💡 Saldo DompetBowar dapat digunakan untuk pembayaran booking dan akan otomatis dikembalikan jika terjadi refund.
+                </p>
+                <p className="text-amber-200 text-xs mt-2">
+                  ⚠️ Permintaan top up akan ditinjau oleh admin. Saldo akan ditambahkan setelah konfirmasi.
                 </p>
               </div>
 
@@ -278,10 +557,17 @@ export function DompetBowarScreen() {
                 </button>
                 <button
                   onClick={handleTopUp}
-                  disabled={!topUpAmount || parseInt(topUpAmount) < 10000}
-                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-2xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 disabled:shadow-none"
+                  disabled={!topUpAmount || parseInt(topUpAmount) < 10000 || !proofImage || !senderName.trim() || isSubmitting}
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-2xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 disabled:shadow-none flex items-center justify-center gap-2"
                 >
-                  Top Up
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    'Top Up'
+                  )}
                 </button>
               </div>
             </div>

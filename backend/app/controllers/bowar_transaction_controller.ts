@@ -1,4 +1,5 @@
 import { HttpContext } from '@adonisjs/core/http'
+import { DateTime } from 'luxon'
 import BowarTransaction from '#models/bowar_transaction'
 import User from '#models/user'
 import Booking from '#models/booking'
@@ -7,30 +8,80 @@ export default class BowarTransactionController {
   /**
    * GET /bowar-transactions - Get all transactions for authenticated user
    * Returns transaction history for DompetBowar
+   * For operators: returns all pending topups if status=pending query param is provided
    */
   async index({ auth, request, response }: HttpContext) {
     try {
+      // Check authentication
       await auth.check()
       const user = auth.user!
+      
+      // Log for debugging
+      console.log('📊 BowarTransaction index - User:', user.username, 'Role:', user.role, 'ID:', user.id)
 
       const page = request.input('page', 1)
       const limit = request.input('limit', 20)
+      const status = request.input('status') // 'pending', 'completed', 'failed', or undefined for all
+      const type = request.input('type') // 'topup', 'payment', 'refund', or undefined for all
 
-      const transactions = await BowarTransaction.query()
-        .where('user_id', user.id)
+      let query = BowarTransaction.query()
+
+      // If operator and requesting topups, return all topups (not filtered by user_id)
+      if (user.role === 'operator' && type === 'topup') {
+        query = query.where('type', 'topup')
+        // Apply status filter if provided
+        if (status) {
+          query = query.where('status', status)
+        }
+      } else {
+        // Regular users only see their own transactions
+        query = query.where('user_id', user.id)
+        
+        // Apply filters for regular users
+        if (status) {
+          query = query.where('status', status)
+        }
+        if (type) {
+          query = query.where('type', type)
+        }
+      }
+
+      const transactions = await query
         .orderBy('created_at', 'desc')
         .paginate(page, limit)
 
-      return response.ok({
-        message: 'Riwayat transaksi berhasil diambil',
-        data: transactions.serialize().data.map((tx: any) => ({
+      // For operators viewing pending topups, include user info
+      const transactionData = transactions.serialize().data.map(async (tx: any) => {
+        const baseData = {
           id: tx.id,
           type: tx.type,
           amount: parseFloat(tx.amount),
           description: tx.description,
           status: tx.status,
           createdAt: tx.created_at,
-        })),
+          proofImage: tx.proof_image,
+          senderName: tx.sender_name,
+        }
+
+        // If operator viewing topups, include user info
+        if (user.role === 'operator' && type === 'topup') {
+          const transactionUser = await User.find(tx.user_id)
+          return {
+            ...baseData,
+            userId: tx.user_id,
+            username: transactionUser?.username || 'Unknown',
+            email: transactionUser?.email || 'Unknown',
+          }
+        }
+
+        return baseData
+      })
+
+      const resolvedData = await Promise.all(transactionData)
+
+      return response.ok({
+        message: 'Riwayat transaksi berhasil diambil',
+        data: resolvedData,
         meta: transactions.serialize().meta,
       })
     } catch {
@@ -113,6 +164,13 @@ export default class BowarTransactionController {
         })
       }
 
+      // Validate proofImage is base64 string
+      if (typeof proofImage !== 'string' || proofImage.length === 0) {
+        return response.badRequest({
+          message: 'Bukti transfer tidak valid',
+        })
+      }
+
       // Create pending transaction
       const transaction = await BowarTransaction.create({
         user_id: user.id,
@@ -136,8 +194,14 @@ export default class BowarTransactionController {
       })
     } catch (error: any) {
       console.error('Topup error:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      })
       return response.internalServerError({
-        message: 'Terjadi kesalahan saat membuat permintaan top up',
+        message: error.message || 'Terjadi kesalahan saat membuat permintaan top up',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       })
     }
   }
@@ -320,8 +384,10 @@ export default class BowarTransactionController {
       transactionOwner.bowar_wallet = (transactionOwner.bowar_wallet || 0) + parseFloat(transaction.amount.toString())
       await transactionOwner.save()
 
-      // Update transaction status
+      // Update transaction status and save approval info
       transaction.status = 'completed'
+      transaction.approved_by = user.id
+      transaction.approved_at = DateTime.now()
       await transaction.save()
 
       return response.ok({
@@ -370,8 +436,14 @@ export default class BowarTransactionController {
         })
       }
 
+      // Get rejection note from request body (optional)
+      const rejectionNote = request.input('rejection_note', null)
+
       // Update transaction status
       transaction.status = 'failed'
+      if (rejectionNote) {
+        transaction.rejection_note = rejectionNote
+      }
       await transaction.save()
 
       return response.ok({

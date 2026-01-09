@@ -21,11 +21,42 @@ const api = axios.create({
 // Add token to requests if available
 api.interceptors.request.use(
   (config) => {
+    // List of public endpoints that don't require authentication
+    const publicEndpoints = [
+      '/login',
+      '/register',
+      '/warnets',
+    ];
+    
+    // Check if this is a public endpoint (exact match or starts with)
+    const isPublicEndpoint = config.url && publicEndpoints.some(endpoint => {
+      const url = config.url || '';
+      return url === endpoint || url.startsWith(endpoint + '/');
+    });
+    
     const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.warn('No auth token found in localStorage');
+    if (token && token.trim().length > 0) {
+      // Ensure token doesn't already have "Bearer " prefix
+      const cleanToken = token.startsWith('Bearer ') ? token.substring(7).trim() : token.trim();
+      
+      // Set Authorization header (both lowercase and capitalized for compatibility)
+      config.headers.Authorization = `Bearer ${cleanToken}`;
+      config.headers.authorization = `Bearer ${cleanToken}`; // Also set lowercase version
+      
+      // Debug logging in development
+      if (import.meta.env.DEV && !isPublicEndpoint) {
+        console.log('✅ Token added to request:', config.url);
+        console.log('   Token length:', cleanToken.length);
+        console.log('   Token preview:', cleanToken.substring(0, 30) + '...');
+        console.log('   Authorization header set:', !!config.headers.Authorization);
+        console.log('   Full Authorization header:', config.headers.Authorization?.substring(0, 50) + '...');
+      }
+    } else if (!isPublicEndpoint) {
+      // Only warn for protected endpoints in development
+      if (import.meta.env.DEV) {
+        console.warn('⚠️ No auth token found in localStorage for protected request:', config.url);
+        console.warn('   Available localStorage keys:', Object.keys(localStorage));
+      }
     }
     return config;
   },
@@ -39,10 +70,20 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear token and redirect to login
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
-      // You might want to redirect here if using React Router
+      // Check if this is an operator request
+      const url = error.config?.url || '';
+      const isOperatorRequest = url.includes('/operator/') || 
+                                url.includes('/bowar-transactions') && 
+                                localStorage.getItem('auth_operator');
+      
+      // For operator requests, don't automatically clear operator data
+      // Let the component handle the error gracefully
+      if (!isOperatorRequest) {
+        // Only clear for regular user requests
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+      }
+      // Note: auth_operator is not cleared here, let component handle it
     }
     return Promise.reject(error);
   }
@@ -68,6 +109,9 @@ export const registerMember = async (data: {
   const response = await api.post('/register/member', data);
   return response.data;
 };
+
+// Register Operator - REMOVED for security
+// Operators should be created by admin only, not self-registration
 
 // Get all warnets
 export const getWarnets = async () => {
@@ -99,22 +143,58 @@ export const login = async (data: {
    * }
    */
 
-  // Handle token - AdonisJS returns token object with value property
+  // Handle token - AdonisJS createToken returns an AccessToken object
+  // The token object has a .value property that contains the actual token string
   if (response.data?.token) {
-    // Token can be either an object with .value or a string
-    const tokenValue = typeof response.data.token === 'string' 
-      ? response.data.token 
-      : response.data.token.value || response.data.token.token;
+    let tokenValue: string | null = null;
     
-    if (tokenValue) {
+    // Log token structure for debugging
+    console.log('🔍 Token structure:', {
+      type: typeof response.data.token,
+      isObject: typeof response.data.token === 'object',
+      keys: typeof response.data.token === 'object' ? Object.keys(response.data.token) : 'N/A',
+      hasValue: !!(response.data.token as any)?.value,
+      valueType: typeof (response.data.token as any)?.value,
+    });
+    
+    if (typeof response.data.token === 'string') {
+      // If token is already a string (shouldn't happen with AdonisJS, but handle it)
+      tokenValue = response.data.token;
+      console.log('⚠️ Token is string (unexpected)');
+    } else if (response.data.token && typeof response.data.token === 'object') {
+      // AdonisJS createToken returns object with .value property
+      const tokenObj = response.data.token as any;
+      tokenValue = tokenObj.value || tokenObj.token || tokenObj.hash || null;
+      
+      if (!tokenValue && tokenObj.toString) {
+        // Try toString as last resort
+        const str = tokenObj.toString();
+        if (str && str !== '[object Object]') {
+          tokenValue = str;
+        }
+      }
+    }
+    
+    if (tokenValue && typeof tokenValue === 'string' && tokenValue.length > 0) {
       localStorage.setItem('auth_token', tokenValue);
-      localStorage.setItem(
-        'auth_user',
-        JSON.stringify(response.data.user)
-      );
-      console.log('✅ Token saved to localStorage');
+      // Verify token was saved
+      const savedToken = localStorage.getItem('auth_token');
+      if (savedToken === tokenValue) {
+        console.log('✅ Token saved to localStorage');
+        console.log('   Token length:', tokenValue.length);
+        console.log('   Token preview:', tokenValue.substring(0, 30) + '...');
+      } else {
+        console.error('❌ Token save verification failed');
+      }
     } else {
-      console.error('❌ Token value not found in response:', response.data.token);
+      console.error('❌ Token value not found or invalid in response:', {
+        token: response.data.token,
+        tokenType: typeof response.data.token,
+        tokenKeys: response.data.token && typeof response.data.token === 'object' 
+          ? Object.keys(response.data.token) 
+          : 'N/A',
+        tokenValue: tokenValue,
+      });
     }
   } else {
     console.error('❌ No token in login response:', response.data);
@@ -165,6 +245,12 @@ export const updateProfile = async (data: {
 // Get user profile with cafe wallets
 export const getUserProfile = async () => {
   const response = await api.get('/profile');
+  return response.data;
+};
+
+// Get all memberships for user's email (from all accounts with same email)
+export const getAllMemberships = async () => {
+  const response = await api.get('/profile/all-memberships');
   return response.data;
 };
 
@@ -227,11 +313,39 @@ export const updateWalletTime = async (walletId: number, remainingMinutes: numbe
 // ============================================
 
 // Get all transactions for authenticated user
-export const getBowarTransactions = async (page = 1, limit = 20) => {
-  const response = await api.get('/bowar-transactions', {
-    params: { page, limit },
-  });
-  return response.data;
+// For operators: can get pending topups by passing status='pending' and type='topup'
+export const getBowarTransactions = async (page = 1, limit = 20, status?: string, type?: string) => {
+  // Verify token exists before making request
+  const token = localStorage.getItem('auth_token');
+  if (!token || token.trim().length === 0) {
+    console.error('❌ No token found in localStorage for getBowarTransactions');
+    throw new Error('No authentication token found');
+  }
+  
+  // Log token info for debugging (only in dev mode)
+  if (import.meta.env.DEV) {
+    console.log('🔍 getBowarTransactions - Token exists, length:', token.length);
+    console.log('   Token preview:', token.substring(0, 30) + '...');
+    console.log('   Request params:', { page, limit, status, type });
+  }
+  
+  try {
+    const response = await api.get('/bowar-transactions', {
+      params: { page, limit, ...(status && { status }), ...(type && { type }) },
+    });
+    return response.data;
+  } catch (error: any) {
+    // Log detailed error info
+    if (import.meta.env.DEV) {
+      console.error('❌ getBowarTransactions error:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        url: error.config?.url,
+        headers: error.config?.headers,
+      });
+    }
+    throw error;
+  }
 };
 
 // Get transaction detail
@@ -278,8 +392,10 @@ export const approveTopup = async (transactionId: number) => {
 };
 
 // Reject topup (for operator)
-export const rejectTopup = async (transactionId: number) => {
-  const response = await api.patch(`/bowar-transactions/${transactionId}/reject`);
+export const rejectTopup = async (transactionId: number, rejectionNote?: string) => {
+  const response = await api.patch(`/bowar-transactions/${transactionId}/reject`, {
+    rejection_note: rejectionNote || null,
+  });
   return response.data;
 };
 
@@ -290,6 +406,25 @@ export const rejectTopup = async (transactionId: number) => {
 // Get warnet rules
 export const getWarnetRules = async (warnetId: number) => {
   const response = await api.get(`/warnets/${warnetId}/rules`);
+  return response.data;
+};
+
+// ============================================
+// OPERATOR APIs
+// ============================================
+
+// Get all members for a warnet (for operators)
+export const getWarnetMembers = async (warnetId: number) => {
+  const response = await api.get(`/operator/warnet/${warnetId}/members`);
+  return response.data;
+};
+
+// Get statistics for a warnet (for operators)
+export const getWarnetStatistics = async (warnetId: number, startDate?: string, endDate?: string) => {
+  const params: any = {};
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  const response = await api.get(`/operator/warnet/${warnetId}/statistics`, { params });
   return response.data;
 };
 

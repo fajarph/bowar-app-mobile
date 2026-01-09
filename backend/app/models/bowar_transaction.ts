@@ -32,10 +32,24 @@ export default class BowarTransaction extends BaseModel {
   @column()
   declare sender_name: string | null
 
+  @column()
+  declare approved_by: number | null
+
+  @column.dateTime()
+  declare approved_at: DateTime | null
+
+  @column()
+  declare rejection_note: string | null
+
   @belongsTo(() => User, {
     foreignKey: 'user_id',
   })
   declare user: BelongsTo<typeof User>
+
+  @belongsTo(() => User, {
+    foreignKey: 'approved_by',
+  })
+  declare approver: BelongsTo<typeof User> | null
 
   @belongsTo(() => Booking, {
     foreignKey: 'booking_id',

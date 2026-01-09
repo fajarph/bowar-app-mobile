@@ -1,6 +1,7 @@
-import { useContext, useState, useMemo } from 'react';
+import { useContext, useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
+import type { RegisteredUser, CafeWallet } from '../../App';
 import {
   Users,
   Crown,
@@ -14,16 +15,19 @@ import {
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { toast } from 'sonner';
+import { getWarnetMembers } from '../../services/api';
 
 export function OperatorMembers() {
   const context = useContext(AppContext);
   const navigate = useNavigate();
   const operator = context?.operator;
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [selectedMember, setSelectedMember] = useState<RegisteredUser | null>(null);
   const [showTimeDialog, setShowTimeDialog] = useState(false);
   const [timeAction, setTimeAction] = useState<'add' | 'deduct'>('add');
   const [hoursToModify, setHoursToModify] = useState(1);
+  const [members, setMembers] = useState<RegisteredUser[]>([]);
+  const [loading, setLoading] = useState(true);
 
   if (!operator) {
     navigate('/operator/login');
@@ -32,13 +36,48 @@ export function OperatorMembers() {
 
   const cafe = context?.cafes.find((c) => c.id === operator.cafeId);
 
-  // Get all members of this cafe
-  const cafeMembers = useMemo(() => {
-    const members = context?.registeredUsers.filter((u) =>
-      u.cafeWallets?.some((w) => w.cafeId === operator.cafeId)
-    ) || [];
+  // Fetch members from backend
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!operator?.cafeId) return;
+      
+      try {
+        setLoading(true);
+        const warnetId = parseInt(operator.cafeId);
+        const response = await getWarnetMembers(warnetId);
+        
+        if (response.data && Array.isArray(response.data)) {
+          // Map backend data to RegisteredUser format
+          const mappedMembers: RegisteredUser[] = response.data.map((member: any) => ({
+            id: String(member.id),
+            username: member.username,
+            email: member.email,
+            role: member.role as 'member',
+            password: '', // Not needed for display
+            bowarWallet: member.bowarWallet || 0,
+            avatar: member.avatar,
+            cafeWallets: member.cafeWallets || [],
+          }));
+          setMembers(mappedMembers);
+        }
+      } catch (error: any) {
+        console.error('Failed to load members:', error);
+        toast.error('Gagal memuat data member');
+        // Fallback to context data if available
+        const fallbackMembers = context?.registeredUsers.filter((u) =>
+          u.cafeWallets?.some((w) => w.cafeId === operator.cafeId)
+        ) || [];
+        setMembers(fallbackMembers);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    // Apply search filter
+    loadMembers();
+  }, [operator?.cafeId, context?.registeredUsers]);
+
+  // Get all members of this cafe with search filter
+  const cafeMembers = useMemo(() => {
     if (searchQuery) {
       return members.filter(
         (m) =>
@@ -46,11 +85,10 @@ export function OperatorMembers() {
           m.email.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
     return members;
-  }, [context?.registeredUsers, operator.cafeId, searchQuery]);
+  }, [members, searchQuery]);
 
-  const handleOpenTimeDialog = (member: any, action: 'add' | 'deduct') => {
+  const handleOpenTimeDialog = (member: RegisteredUser, action: 'add' | 'deduct') => {
     setSelectedMember(member);
     setTimeAction(action);
     setHoursToModify(1);
@@ -60,7 +98,7 @@ export function OperatorMembers() {
   const handleModifyTime = () => {
     if (!selectedMember || hoursToModify <= 0) return;
 
-    const wallet = selectedMember.cafeWallets?.find((w: any) => w.cafeId === operator.cafeId);
+    const wallet = selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId);
     if (!wallet) return;
 
     const minutesToModify = hoursToModify * 60;
@@ -69,9 +107,11 @@ export function OperatorMembers() {
         ? wallet.remainingMinutes + minutesToModify
         : Math.max(0, wallet.remainingMinutes - minutesToModify);
 
+    // Note: Date.now() is called inside event handler, not during render
+    const now = Date.now();
     context?.updateMemberWallet(selectedMember.id, operator.cafeId, {
       remainingMinutes: newRemainingMinutes,
-      lastUpdated: Date.now(),
+      lastUpdated: now,
     });
 
     toast.success(
@@ -142,7 +182,7 @@ export function OperatorMembers() {
               </div>
               <div>
                 <p className="text-slate-400 text-xs">Total Members</p>
-                <p className="text-slate-100 text-2xl">{cafeMembers.length}</p>
+                <p className="text-slate-100 text-2xl">{loading ? '...' : cafeMembers.length}</p>
               </div>
             </div>
           </div>
@@ -155,11 +195,9 @@ export function OperatorMembers() {
               <div>
                 <p className="text-slate-400 text-xs">Active Now</p>
                 <p className="text-slate-100 text-2xl">
-                  {
-                    cafeMembers.filter((m) =>
-                      m.cafeWallets?.some((w) => w.cafeId === operator.cafeId && w.isActive)
-                    ).length
-                  }
+                  {loading ? '...' : cafeMembers.filter((m) =>
+                    m.cafeWallets?.some((w) => w.cafeId === operator.cafeId && w.isActive)
+                  ).length}
                 </p>
               </div>
             </div>
@@ -167,7 +205,14 @@ export function OperatorMembers() {
         </div>
 
         {/* Member List */}
-        {cafeMembers.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-slate-400">Memuat data member...</p>
+            </div>
+          </div>
+        ) : cafeMembers.length === 0 ? (
           <div className="flex items-center justify-center h-[60vh]">
             <div className="text-center">
               <div className="bg-slate-900/50 border border-slate-800/50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
@@ -308,7 +353,7 @@ export function OperatorMembers() {
                     <p className="text-slate-400 text-xs mb-1">Waktu Tersimpan Saat Ini</p>
                     <p className="text-teal-300">
                       {formatTime(
-                        selectedMember.cafeWallets?.find((w: any) => w.cafeId === operator.cafeId)
+                        selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId)
                           ?.remainingMinutes || 0
                       )}
                     </p>
@@ -346,12 +391,12 @@ export function OperatorMembers() {
                   <p className="text-teal-300 text-xl">
                     {formatTime(
                       timeAction === 'add'
-                        ? (selectedMember.cafeWallets?.find((w: any) => w.cafeId === operator.cafeId)
+                        ? (selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId)
                             ?.remainingMinutes || 0) +
                             hoursToModify * 60
                         : Math.max(
                             0,
-                            (selectedMember.cafeWallets?.find((w: any) => w.cafeId === operator.cafeId)
+                            (selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId)
                               ?.remainingMinutes || 0) -
                               hoursToModify * 60
                           )

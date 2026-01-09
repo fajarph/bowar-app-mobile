@@ -1,13 +1,39 @@
-import { useContext } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { User, Mail, Crown, Edit, LogOut, Clock, MapPin, Wallet, ChevronRight } from 'lucide-react';
 import { BottomNav } from './BottomNav';
 import { toast } from 'sonner';
+import { getAllMemberships } from '../services/api';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
+
+interface Membership {
+  userId: string;
+  username: string;
+  cafeId: string;
+  cafeName: string;
+  remainingMinutes: number;
+  isActive: boolean;
+  lastUpdated: string;
+  isCurrentAccount: boolean;
+}
 
 export function ProfileScreen() {
   const navigate = useNavigate();
   const context = useContext(AppContext);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showRegisterDialog, setShowRegisterDialog] = useState(false);
+  const [allMemberships, setAllMemberships] = useState<Membership[]>([]);
+  const [loadingMemberships, setLoadingMemberships] = useState(false);
 
   const handleLogout = () => {
     context?.setUser(null);
@@ -24,40 +50,33 @@ export function ProfileScreen() {
     return `${hours}h ${mins}m`;
   };
 
-  // Get all memberships for this email (from all accounts with same email)
-  const getAllMemberships = () => {
-    if (!context?.user?.email) return [];
-    
-    const allWallets: Array<{
-      userId: string;
-      cafeId: string;
-      cafeName: string;
-      remainingMinutes: number;
-      isActive: boolean;
-      isCurrentAccount: boolean;
-    }> = [];
-    
-    // Find all users with the same email
-    context.registeredUsers
-      .filter((u) => u.email === context.user?.email && u.role === 'member')
-      .forEach((user) => {
-        if (user.cafeWallets) {
-          user.cafeWallets.forEach((wallet) => {
-            // Check if this wallet is from current logged-in account
-            const isCurrentAccount = user.id === context.user?.id;
-            allWallets.push({
-              userId: user.id, // Add userId for unique key
-              ...wallet,
-              isCurrentAccount,
-            });
-          });
-        }
-      });
-    
-    return allWallets;
-  };
+  // Fetch all memberships from backend
+  useEffect(() => {
+    const fetchMemberships = async () => {
+      if (!context?.user?.email) {
+        setAllMemberships([]);
+        return;
+      }
 
-  const allMemberships = getAllMemberships();
+      try {
+        setLoadingMemberships(true);
+        const response = await getAllMemberships();
+        if (response.data && Array.isArray(response.data)) {
+          setAllMemberships(response.data);
+        } else {
+          setAllMemberships([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch memberships:', error);
+        toast.error('Gagal memuat data membership');
+        setAllMemberships([]);
+      } finally {
+        setLoadingMemberships(false);
+      }
+    };
+
+    fetchMemberships();
+  }, [context?.user?.email, context?.user?.id]);
 
   return (
     <div className="min-h-screen pb-24 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -129,47 +148,60 @@ export function ProfileScreen() {
                 </p>
               </div>
               <div className="space-y-3">
-                {allMemberships.map((wallet) => (
-                  <div
-                    key={`${wallet.userId}-${wallet.cafeId}`}
-                    className={`bg-slate-900/50 border rounded-2xl p-4 ${
-                      wallet.isCurrentAccount
-                        ? 'border-blue-500/50 bg-blue-500/5'
-                        : 'border-slate-700/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-cyan-400" />
-                        <span className="text-slate-200 text-sm">{wallet.cafeName}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {wallet.isCurrentAccount && (
-                          <div className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-500/30 rounded-full px-2 py-1">
-                            <span className="text-blue-400 text-xs">Aktif</span>
-                          </div>
-                        )}
-                        {wallet.isActive && (
-                          <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/30 rounded-full px-2 py-1">
-                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                            <span className="text-green-400 text-xs">Sedang Digunakan</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 text-xs">Waktu Tersimpan</span>
-                      <span className={`tabular-nums ${wallet.isCurrentAccount ? 'text-blue-400' : 'text-cyan-400'}`}>
-                        {formatTime(wallet.remainingMinutes)}
-                      </span>
-                    </div>
-                    {!wallet.isCurrentAccount && (
-                      <p className="text-slate-500 text-xs mt-2 italic">
-                        Login dengan akun member untuk menggunakan membership ini
-                      </p>
-                    )}
+                {loadingMemberships ? (
+                  <div className="text-center py-4">
+                    <p className="text-slate-400 text-sm">Memuat membership...</p>
                   </div>
-                ))}
+                ) : (
+                  allMemberships.map((wallet) => (
+                    <div
+                      key={`${wallet.userId}-${wallet.cafeId}`}
+                      className={`bg-slate-900/50 border rounded-2xl p-4 ${
+                        wallet.isCurrentAccount
+                          ? 'border-blue-500/50 bg-blue-500/5'
+                          : 'border-slate-700/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <MapPin className="w-4 h-4 text-cyan-400" />
+                            <span className="text-slate-200 text-sm font-medium">{wallet.cafeName}</span>
+                          </div>
+                          {!wallet.isCurrentAccount && (
+                            <p className="text-slate-500 text-xs ml-6">
+                              Username: <span className="text-slate-400">{wallet.username}</span>
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {wallet.isCurrentAccount && (
+                            <div className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-500/30 rounded-full px-2 py-1">
+                              <span className="text-blue-400 text-xs">Aktif</span>
+                            </div>
+                          )}
+                          {wallet.isActive && (
+                            <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/30 rounded-full px-2 py-1">
+                              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                              <span className="text-green-400 text-xs">Sedang Digunakan</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-xs">Waktu Tersimpan</span>
+                        <span className={`tabular-nums font-medium ${wallet.isCurrentAccount ? 'text-blue-400' : 'text-cyan-400'}`}>
+                          {formatTime(wallet.remainingMinutes)}
+                        </span>
+                      </div>
+                      {!wallet.isCurrentAccount && (
+                        <p className="text-slate-500 text-xs mt-2 italic">
+                          Login dengan username <span className="text-slate-400">{wallet.username}</span> untuk menggunakan membership ini
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -257,7 +289,7 @@ export function ProfileScreen() {
             <p className="text-slate-300 text-sm">✓ Dapatkan harga member dan benefit di cafe tersebut</p>
           </div>
           <button
-            onClick={() => navigate('/register')}
+            onClick={() => setShowRegisterDialog(true)}
             className="w-full mt-4 bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/50 hover:border-blue-500/70 text-blue-300 py-3 rounded-2xl transition-all flex items-center justify-center gap-2"
           >
             <Crown className="w-4 h-4" />
@@ -276,7 +308,7 @@ export function ProfileScreen() {
           </button>
 
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutDialog(true)}
             className="w-full bg-slate-900/50 backdrop-blur-xl border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
           >
             <LogOut className="w-5 h-5" />
@@ -293,6 +325,62 @@ export function ProfileScreen() {
 
       {/* Bottom Navigation */}
       <BottomNav />
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-100 flex items-center gap-2">
+              <LogOut className="w-5 h-5 text-red-400" />
+              Konfirmasi Keluar
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-300">
+              Apakah Anda yakin ingin keluar dari aplikasi? Anda perlu login kembali untuk mengakses akun Anda.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              Ya, Keluar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Register Membership Confirmation Dialog */}
+      <AlertDialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-100 flex items-center gap-2">
+              <Crown className="w-5 h-5 text-blue-400" />
+              Daftar Membership Baru
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-300">
+              Anda akan diarahkan ke halaman registrasi untuk membuat akun member baru di cafe lain. 
+              Pastikan menggunakan email yang sama ({context?.user?.email}) dengan username yang berbeda.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowRegisterDialog(false);
+                navigate('/register');
+              }}
+              className="bg-blue-500 hover:bg-blue-600 text-white"
+            >
+              Lanjutkan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

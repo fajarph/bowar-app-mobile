@@ -321,7 +321,7 @@ export function RegisterScreen() {
 
             {/* Warnet Selection (Member Only) */}
             {selectedRole === 'member' && (
-              <div>
+              <div className="relative z-10">
                 <label className="block text-slate-300 text-sm mb-2 flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-teal-400" />
                   Pilih Warnet Anda
@@ -329,8 +329,20 @@ export function RegisterScreen() {
                 <select
                   value={selectedCafe}
                   onChange={(e) => setSelectedCafe(e.target.value)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.focus();
+                  }}
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.focus();
+                  }}
                   disabled={loadingWarnets}
-                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed relative z-10"
+                  style={{ 
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'manipulation'
+                  }}
                 >
                   <option value="">
                     {loadingWarnets ? 'Memuat warnet...' : 'Pilih warnet'}

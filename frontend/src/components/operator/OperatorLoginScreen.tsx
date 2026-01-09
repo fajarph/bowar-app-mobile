@@ -1,8 +1,9 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
-import { Shield, Eye, EyeOff, Building2 } from 'lucide-react';
+import { Shield, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { login } from '../../services/api';
 
 export function OperatorLoginScreen() {
   const [username, setUsername] = useState('');
@@ -12,7 +13,14 @@ export function OperatorLoginScreen() {
   const navigate = useNavigate();
   const context = useContext(AppContext);
 
-  const handleLogin = () => {
+  // Debug: Log cafes when they change
+  useEffect(() => {
+    if (context?.cafes) {
+      console.log('🏢 Cafes loaded in OperatorLoginScreen:', context.cafes.length);
+    }
+  }, [context?.cafes]);
+
+  const handleLogin = async () => {
     if (!username || !password) {
       toast.error('Silakan isi semua field');
       return;
@@ -23,17 +31,71 @@ export function OperatorLoginScreen() {
       return;
     }
 
-    // Find operator account
-    const operator = context?.operators?.find(
-      (op) => op.username === username && op.password === password && op.cafeId === selectedCafe
-    );
+    try {
+      // Login via backend API
+      const response = await login({
+        username,
+        password,
+      });
 
-    if (operator) {
+      const backendUser = response.user;
+
+      // Check if user is operator
+      if (backendUser.role !== 'operator') {
+        toast.error('Akun ini bukan operator');
+        return;
+      }
+
+      // Find cafe from context
+      const cafe = context?.cafes.find((c) => c.id === selectedCafe);
+      if (!cafe) {
+        toast.error('Warnet tidak ditemukan');
+        return;
+      }
+
+      // Verify operator is assigned to selected cafe
+      // Check if operator's warnet_id matches selected cafe
+      if (backendUser.warnet && String(backendUser.warnet.id) !== selectedCafe) {
+        toast.error('Operator tidak terdaftar di warnet yang dipilih');
+        return;
+      }
+
+      // Verify token was saved (login() function should have saved it)
+      // Wait a bit for token to be saved by login() function
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.error('Token not found after login');
+        toast.error('Gagal menyimpan token. Silakan coba lagi.');
+        return;
+      }
+
+      // Set operator in context
+      const operator = {
+        id: String(backendUser.id),
+        username: backendUser.username,
+        name: backendUser.username, // Use username as name if name not available
+        password: '', // Not stored for security
+        role: 'operator' as const,
+        cafeId: selectedCafe,
+        cafeName: cafe.name,
+      };
+
       context?.setOperator(operator);
-      toast.success(`Selamat datang, ${operator.name}! Mengelola ${operator.cafeName}`);
+      localStorage.setItem('auth_operator', JSON.stringify(operator));
+      
+      toast.success(`Selamat datang, ${backendUser.username}! Mengelola ${cafe.name}`);
       navigate('/operator/dashboard');
-    } else {
-      toast.error('Kredensial atau penugasan cafe tidak valid');
+    } catch (error: unknown) {
+      console.error('Operator login error:', error);
+      const errorMessage = 
+        (error && typeof error === 'object' && 'response' in error && 
+         error.response && typeof error.response === 'object' && 'data' in error.response &&
+         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
+          ? String(error.response.data.message)
+          : 'Kredensial tidak valid';
+      toast.error(errorMessage);
     }
   };
 
@@ -71,8 +133,8 @@ export function OperatorLoginScreen() {
         </div>
 
         {/* Login Card */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8 shadow-2xl shadow-purple-500/5">
-          <div className="space-y-5">
+        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8 shadow-2xl shadow-purple-500/5 relative z-10">
+          <div className="space-y-5 relative z-10">
             {/* Operator Badge */}
             <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-2xl p-4 text-center">
               <div className="flex items-center justify-center gap-2 mb-1">
@@ -89,21 +151,38 @@ export function OperatorLoginScreen() {
               <label className="block text-slate-300 text-sm mb-2">
                 Warnet
               </label>
-              <div className="relative">
-                <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <select
-                  value={selectedCafe}
-                  onChange={(e) => setSelectedCafe(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl pl-12 pr-4 py-3.5 text-slate-200 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
-                >
-                  <option value="">Pilih warnet Anda</option>
-                  {context?.cafes.map((cafe) => (
-                    <option key={cafe.id} value={cafe.id}>
-                      {cafe.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={selectedCafe}
+                onChange={(e) => setSelectedCafe(e.target.value)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.currentTarget.focus();
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  e.currentTarget.focus();
+                }}
+                disabled={!context?.cafes || context.cafes.length === 0}
+                className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ 
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation'
+                }}
+              >
+                <option value="">
+                  {!context?.cafes || context.cafes.length === 0 
+                    ? 'Memuat daftar warnet...' 
+                    : 'Pilih warnet Anda'}
+                </option>
+                {context?.cafes && context.cafes.length > 0 && context.cafes.map((cafe) => (
+                  <option key={cafe.id} value={cafe.id}>
+                    {cafe.name}
+                  </option>
+                ))}
+              </select>
+              {!context?.cafes || context.cafes.length === 0 ? (
+                <p className="text-slate-500 text-xs mt-1">Memuat daftar warnet...</p>
+              ) : null}
             </div>
 
             {/* Username Input */}

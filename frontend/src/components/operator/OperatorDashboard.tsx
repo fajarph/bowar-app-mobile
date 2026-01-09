@@ -1,6 +1,7 @@
-import { useContext, useMemo } from 'react';
+import { useContext, useMemo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
+import type { ChatMessage } from '../../App';
 import {
   Monitor,
   Users,
@@ -12,11 +13,33 @@ import {
   Activity,
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
+import { getWarnetStatistics } from '../../services/api';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
 
 export function OperatorDashboard() {
   const context = useContext(AppContext);
   const navigate = useNavigate();
   const operator = context?.operator;
+  const [statistics, setStatistics] = useState<{
+    todayRevenue: number;
+    todayBookings: number;
+    activeBookings: number;
+    totalMembers: number;
+    pendingTopups: number;
+    transactions: any[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   if (!operator) {
     navigate('/operator/login');
@@ -25,7 +48,38 @@ export function OperatorDashboard() {
 
   const cafe = context?.cafes.find((c) => c.id === operator.cafeId);
 
-  // Calculate statistics
+  // Fetch statistics from backend
+  useEffect(() => {
+    const loadStatistics = async () => {
+      if (!operator?.cafeId) return;
+      
+      try {
+        setLoading(true);
+        const warnetId = parseInt(operator.cafeId);
+        const response = await getWarnetStatistics(warnetId);
+        
+        if (response.data) {
+          setStatistics({
+            todayRevenue: response.data.todayRevenue || 0,
+            todayBookings: response.data.todayBookings || 0,
+            activeBookings: response.data.activeBookings || 0,
+            totalMembers: response.data.totalMembers || 0,
+            pendingTopups: response.data.pendingTopups || 0,
+            transactions: response.data.transactions || [],
+          });
+        }
+      } catch (error: any) {
+        console.error('Failed to load statistics:', error);
+        toast.error('Gagal memuat statistik');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStatistics();
+  }, [operator?.cafeId]);
+
+  // Calculate statistics (fallback to context data if API fails)
   const stats = useMemo(() => {
     const cafeBookings = context?.bookings.filter((b) => b.cafeId === operator.cafeId) || [];
     const todayBookings = cafeBookings.filter((b) => {
@@ -35,7 +89,6 @@ export function OperatorDashboard() {
     });
 
     const activeBookings = cafeBookings.filter((b) => b.status === 'active').length;
-    const todayRevenue = 0; // TODO: Calculate revenue from bookings
 
     const cafeMembers = context?.registeredUsers.filter((u) =>
       u.cafeWallets?.some((w) => w.cafeId === operator.cafeId)
@@ -50,25 +103,30 @@ export function OperatorDashboard() {
     // Pending actions
     const pendingPayments = cafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length;
     const unreadMessages = Object.values(context?.chatMessages || {}).flat().filter(
-      (m: any) => m.sender === 'user'
+      (m: ChatMessage) => m.sender === 'user'
     ).length % 5; // Mock unread count
 
+    // Use API data if available, otherwise use context data
     return {
-      todayBookings: todayBookings.length,
-      activeBookings,
-      todayRevenue,
-      totalMembers: cafeMembers.length,
+      todayBookings: statistics?.todayBookings ?? todayBookings.length,
+      activeBookings: statistics?.activeBookings ?? activeBookings,
+      todayRevenue: statistics?.todayRevenue ?? 0,
+      totalMembers: statistics?.totalMembers ?? cafeMembers.length,
       totalPCs,
       occupiedPCs,
       availablePCs,
       utilizationRate,
       pendingPayments,
       unreadMessages,
+      pendingTopups: statistics?.pendingTopups ?? 0,
     };
-  }, [context?.bookings, context?.registeredUsers, context?.chatMessages, operator.cafeId, cafe?.totalPCs]);
+  }, [context?.bookings, context?.registeredUsers, context?.chatMessages, operator.cafeId, cafe?.totalPCs, statistics]);
 
   const handleLogout = () => {
     context?.setOperator(null);
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_operator');
+    toast.success('👋 Anda berhasil keluar dari panel operator.');
     navigate('/operator/login');
   };
 
@@ -99,7 +157,7 @@ export function OperatorDashboard() {
 
             {/* Logout Button */}
             <button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutDialog(true)}
               className="bg-slate-800/50 border border-slate-700/50 hover:border-red-500/50 rounded-2xl px-4 py-2 transition-all group"
             >
               <div className="flex items-center gap-2">
@@ -181,7 +239,7 @@ export function OperatorDashboard() {
               <div className="flex-1 min-w-0">
                 <p className="text-slate-400 text-xs">Pendapatan Hari Ini</p>
                 <p className="text-teal-300 text-2xl">
-                  Rp {stats.todayRevenue.toLocaleString('id-ID')}
+                  {loading ? '...' : `Rp ${stats.todayRevenue.toLocaleString('id-ID')}`}
                 </p>
               </div>
               <TrendingUp className="w-5 h-5 text-teal-400" />
@@ -237,6 +295,65 @@ export function OperatorDashboard() {
           </div>
         </div>
 
+        {/* Recent Transactions */}
+        {statistics && statistics.transactions.length > 0 && (
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-6">
+            <h3 className="text-slate-200 mb-4 flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-teal-400" />
+              Transaksi Terkini
+            </h3>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {statistics.transactions.slice(0, 10).map((transaction: any) => (
+                <div
+                  key={transaction.id}
+                  className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-4"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          transaction.type === 'topup'
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        }`}
+                      >
+                        {transaction.type === 'topup' ? 'Top Up' : 'Pembayaran'}
+                      </span>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          transaction.status === 'completed' || transaction.status === 'paid'
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                            : transaction.status === 'pending'
+                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        }`}
+                      >
+                        {transaction.status === 'paid' ? 'Lunas' : transaction.status === 'completed' ? 'Selesai' : transaction.status === 'pending' ? 'Pending' : 'Gagal'}
+                      </span>
+                    </div>
+                    <p className="text-slate-200 font-semibold">
+                      Rp {transaction.amount.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <p className="text-slate-400 text-sm mb-1">{transaction.description}</p>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>{transaction.username}</span>
+                    <span>
+                      {new Date(transaction.createdAt).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div>
           <h3 className="text-slate-300 mb-4">Aksi Cepat</h3>
@@ -279,8 +396,30 @@ export function OperatorDashboard() {
             </button>
 
             <button
+              onClick={() => navigate('/operator/topups')}
+              className="bg-gradient-to-br from-amber-900/20 to-amber-800/20 border border-amber-500/30 hover:border-amber-500/50 rounded-3xl p-5 transition-all hover:shadow-lg hover:shadow-amber-500/10 text-left group"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className="bg-amber-500/20 border border-amber-500/30 rounded-2xl p-2 group-hover:scale-110 transition-transform">
+                  <DollarSign className="w-6 h-6 text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-slate-200">Top Up</h4>
+                  <p className="text-slate-400 text-xs">Konfirmasi top up</p>
+                </div>
+              </div>
+              {stats.pendingTopups > 0 && (
+                <div className="mt-2 bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-1.5 inline-block">
+                  <span className="text-red-400 text-xs">
+                    {stats.pendingTopups} pending
+                  </span>
+                </div>
+              )}
+            </button>
+
+            <button
               onClick={() => navigate('/operator/members')}
-              className="bg-gradient-to-br from-teal-900/20 to-teal-800/20 border border-teal-500/30 hover:border-teal-500/50 rounded-3xl p-5 transition-all hover:shadow-lg hover:shadow-teal-500/10 text-left group col-span-2"
+              className="bg-gradient-to-br from-teal-900/20 to-teal-800/20 border border-teal-500/30 hover:border-teal-500/50 rounded-3xl p-5 transition-all hover:shadow-lg hover:shadow-teal-500/10 text-left group"
             >
               <div className="flex items-center gap-3 mb-2">
                 <div className="bg-teal-500/20 border border-teal-500/30 rounded-2xl p-2 group-hover:scale-110 transition-transform">
@@ -298,6 +437,32 @@ export function OperatorDashboard() {
 
       {/* Bottom Navigation */}
       <OperatorBottomNav />
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-100 flex items-center gap-2">
+              <LogOut className="w-5 h-5 text-red-400" />
+              Konfirmasi Keluar
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-300">
+              Apakah Anda yakin ingin keluar dari panel operator? Anda perlu login kembali untuk mengakses panel.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              Ya, Keluar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

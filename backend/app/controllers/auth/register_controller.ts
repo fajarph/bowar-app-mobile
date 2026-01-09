@@ -50,84 +50,157 @@ export default class RegisterController {
    * REGISTER MEMBER
    */
   async registerMember({ request, response }: HttpContext) {
-    const payload = request.only(['username', 'email', 'password', 'warnet_id'])
+    try {
+      const payload = request.only(['username', 'email', 'password', 'warnet_id'])
 
-    const data = await request.validateUsing(registerValidator, {
-      data: {
-        username: payload.username,
-        email: payload.email,
-        password: payload.password,
-      },
-    })
+      const data = await request.validateUsing(registerValidator, {
+        data: {
+          username: payload.username,
+          email: payload.email,
+          password: payload.password,
+        },
+      })
 
-    if (!payload.warnet_id) {
-      return response.badRequest({ message: 'Member wajib memilih warnet' })
-    }
+      if (!payload.warnet_id) {
+        return response.badRequest({ message: 'Member wajib memilih warnet' })
+      }
 
-    const warnet = await Warnet.find(payload.warnet_id)
-    if (!warnet) {
-      return response.badRequest({ message: 'Warnet tidak ditemukan' })
-    }
+      const warnet = await Warnet.find(payload.warnet_id)
+      if (!warnet) {
+        return response.badRequest({ message: 'Warnet tidak ditemukan' })
+      }
 
-    if (await User.findBy('username', data.username)) {
-      return response.badRequest({ message: 'Username sudah digunakan' })
-    }
+      // Username must be unique
+      if (await User.findBy('username', data.username)) {
+        return response.badRequest({ message: 'Username sudah digunakan' })
+      }
 
-    const existingEmail = await User.findBy('email', data.email)
-    if (existingEmail && existingEmail.warnet_id === payload.warnet_id) {
-      return response.badRequest({
-        message: 'Email ini sudah terdaftar di warnet ini',
+      // Check if email + warnet_id combination already exists
+      // Allow same email for different warnets, but not same email + warnet_id
+      const existingMember = await User.query()
+        .where('email', data.email)
+        .where('warnet_id', payload.warnet_id)
+        .where('role', 'member')
+        .first()
+      
+      if (existingMember) {
+        return response.badRequest({
+          message: 'Email ini sudah terdaftar sebagai member di warnet ini. Gunakan username yang berbeda untuk warnet lain.',
+        })
+      }
+
+      const user = await User.create({
+        username: data.username,
+        email: data.email,
+        password: data.password, // ✅ RAW PASSWORD
+        role: 'member',
+        warnet_id: payload.warnet_id,
+      })
+
+      await user.load('warnet')
+
+      return response.created({
+        message: 'Member berhasil terdaftar',
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          warnet: {
+            id: user.warnet.id,
+            name: user.warnet.name,
+            address: user.warnet.address,
+          },
+        },
+      })
+    } catch (error: any) {
+      if (error.code === 'E_VALIDATION_FAILURE') throw error
+
+      // Handle database unique constraint errors
+      if (error.code === '23505') { // PostgreSQL unique violation
+        if (error.constraint === 'users_email_unique') {
+          return response.badRequest({
+            message: 'Email ini sudah terdaftar. Silakan jalankan migration untuk menghapus unique constraint pada email.',
+          })
+        }
+        if (error.constraint === 'users_username_unique') {
+          return response.badRequest({ message: 'Username sudah digunakan' })
+        }
+      }
+
+      console.error('Registration error:', error)
+      return response.internalServerError({
+        message: 'Terjadi kesalahan saat mendaftar member',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       })
     }
-
-    const user = await User.create({
-      username: data.username,
-      email: data.email,
-      password: data.password, // ✅ RAW PASSWORD
-      role: 'member',
-      warnet_id: payload.warnet_id,
-    })
-
-    await user.load('warnet')
-
-    return response.created({
-      message: 'Member berhasil terdaftar',
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        warnet: {
-          id: user.warnet.id,
-          name: user.warnet.name,
-          address: user.warnet.address,
-        },
-      },
-    })
   }
 
   /**
    * REGISTER OPERATOR
    */
   async registerOperator({ request, response }: HttpContext) {
-    const data = request.only(['username', 'email', 'password', 'warnet_id'])
+    try {
+      const payload = request.only(['username', 'email', 'password', 'warnet_id'])
 
-    const warnet = await Warnet.find(data.warnet_id)
-    if (!warnet) {
-      return response.badRequest({ message: 'Warnet tidak ditemukan' })
+      // Validate using registerValidator
+      const data = await request.validateUsing(registerValidator, {
+        data: {
+          username: payload.username,
+          email: payload.email,
+          password: payload.password,
+        },
+      })
+
+      if (!payload.warnet_id) {
+        return response.badRequest({ message: 'Warnet wajib dipilih' })
+      }
+
+      const warnet = await Warnet.find(payload.warnet_id)
+      if (!warnet) {
+        return response.badRequest({ message: 'Warnet tidak ditemukan' })
+      }
+
+      // Check if username already exists
+      if (await User.findBy('username', data.username)) {
+        return response.badRequest({ message: 'Username sudah digunakan' })
+      }
+
+      // Check if email already exists
+      if (await User.findBy('email', data.email)) {
+        return response.badRequest({ message: 'Email sudah digunakan' })
+      }
+
+      const user = await User.create({
+        username: data.username,
+        email: data.email,
+        password: data.password, // ✅ RAW PASSWORD (will be hashed by model)
+        role: 'operator',
+        warnet_id: payload.warnet_id,
+      })
+
+      await user.load('warnet')
+
+      return response.created({
+        message: 'Operator berhasil dibuat',
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          warnet: user.warnet ? {
+            id: user.warnet.id,
+            name: user.warnet.name,
+            address: user.warnet.address,
+          } : null,
+        },
+      })
+    } catch (error: any) {
+      if (error.code === 'E_VALIDATION_FAILURE') throw error
+
+      return response.internalServerError({
+        message: 'Terjadi kesalahan saat mendaftar operator',
+      })
     }
-
-    const user = await User.create({
-      username: data.username,
-      email: data.email,
-      password: data.password, // ✅ RAW PASSWORD
-      role: 'operator',
-      warnet_id: data.warnet_id,
-    })
-
-    return response.created({
-      message: 'Operator berhasil dibuat',
-      user,
-    })
   }
 }
