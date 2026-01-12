@@ -11,85 +11,83 @@ export default class BowarTransactionController {
    * For operators: returns all pending topups if status=pending query param is provided
    */
   async index({ auth, request, response }: HttpContext) {
-    try {
-      // Check authentication
-      await auth.check()
-      const user = auth.user!
-      
-      // Log for debugging
-      console.log('📊 BowarTransaction index - User:', user.username, 'Role:', user.role, 'ID:', user.id)
+  try {
+    /* ================= AUTH ================= */
+    await auth.check()
+    const user = auth.user!
 
-      const page = request.input('page', 1)
-      const limit = request.input('limit', 20)
-      const status = request.input('status') // 'pending', 'completed', 'failed', or undefined for all
-      const type = request.input('type') // 'topup', 'payment', 'refund', or undefined for all
+    /* ================= QUERY PARAMS ================= */
+    const page = request.input('page', 1)
+    const limit = request.input('limit', 20)
+    const status = request.input('status')
+    const type = request.input('type')
 
-      let query = BowarTransaction.query()
+    /* ================= BASE QUERY ================= */
+    let query = BowarTransaction
+      .query()
+      .orderBy('created_at', 'desc')
 
-      // If operator and requesting topups, return all topups (not filtered by user_id)
-      if (user.role === 'operator' && type === 'topup') {
-        query = query.where('type', 'topup')
-        // Apply status filter if provided
-        if (status) {
-          query = query.where('status', status)
-        }
-      } else {
-        // Regular users only see their own transactions
-        query = query.where('user_id', user.id)
-        
-        // Apply filters for regular users
-        if (status) {
-          query = query.where('status', status)
-        }
-        if (type) {
-          query = query.where('type', type)
-        }
+    /* ================= ROLE LOGIC ================= */
+    if (user.role === 'operator' && type === 'topup') {
+      query.where('type', 'topup').preload('user')
+
+      if (status) {
+        query.where('status', status)
       }
+    } else {
+      query.where('user_id', user.id)
 
-      const transactions = await query
-        .orderBy('created_at', 'desc')
-        .paginate(page, limit)
+      if (status) query.where('status', status)
+      if (type) query.where('type', type)
+    }
 
-      // For operators viewing pending topups, include user info
-      const transactionData = transactions.serialize().data.map(async (tx: any) => {
-        const baseData = {
-          id: tx.id,
-          type: tx.type,
-          amount: parseFloat(tx.amount),
-          description: tx.description,
-          status: tx.status,
-          createdAt: tx.created_at,
-          proofImage: tx.proof_image,
-          senderName: tx.sender_name,
-        }
+    /* ================= PAGINATION ================= */
+    const transactions = await query.paginate(page, limit)
 
-        // If operator viewing topups, include user info
-        if (user.role === 'operator' && type === 'topup') {
-          const transactionUser = await User.find(tx.user_id)
-          return {
-            ...baseData,
-            userId: tx.user_id,
-            username: transactionUser?.username || 'Unknown',
-            email: transactionUser?.email || 'Unknown',
-          }
-        }
+    /* ================= SERIALIZE ================= */
+    const data = transactions.serialize().data.map((tx: any) => ({
+      id: tx.id,
+      type: tx.type,
+      amount: Number(tx.amount),
+      description: tx.description,
+      status: tx.status,
+      createdAt: tx.created_at,
+      proofImage: tx.proof_image,
+      senderName: tx.sender_name,
 
-        return baseData
-      })
+      ...(user.role === 'operator' && type === 'topup' && {
+        userId: tx.user?.id,
+        username: tx.user?.username ?? 'Unknown',
+        email: tx.user?.email ?? 'Unknown',
+        userRole: tx.user?.role ?? 'Unknown',
+      }),
+    }))
 
-      const resolvedData = await Promise.all(transactionData)
+    /* ================= RESPONSE ================= */
+    return response.ok({
+      message: 'Riwayat transaksi berhasil diambil',
+      data,
+      meta: transactions.serialize().meta,
+    })
 
-      return response.ok({
-        message: 'Riwayat transaksi berhasil diambil',
-        data: resolvedData,
-        meta: transactions.serialize().meta,
-      })
-    } catch {
+  } catch (error: any) {
+    console.error('❌ BowarTransaction index error:', error)
+
+    /* ================= AUTH ERROR ================= */
+    if (error.code === 'E_UNAUTHORIZED_ACCESS') {
       return response.unauthorized({
         message: 'Silakan login terlebih dahulu',
       })
     }
+
+    /* ================= SERVER ERROR ================= */
+    return response.internalServerError({
+      message: 'Terjadi kesalahan pada server',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    })
   }
+}
+
 
   /**
    * GET /bowar-transactions/:id - Get transaction detail
@@ -411,12 +409,12 @@ export default class BowarTransactionController {
   /**
    * PATCH /bowar-transactions/:id/reject - Reject pending topup (for admin/operator)
    */
-  async reject({ auth, params, response }: HttpContext) {
+  async reject({ auth, params, request, response }: HttpContext) {
     try {
       await auth.check()
       const user = auth.user!
 
-      // Only operator/admin can reject
+      // Only operator can reject
       if (user.role !== 'operator') {
         return response.forbidden({
           message: 'Hanya operator yang dapat menolak top up',
@@ -436,14 +434,14 @@ export default class BowarTransactionController {
         })
       }
 
-      // Get rejection note from request body (optional)
+      // ✅ request sekarang VALID
       const rejectionNote = request.input('rejection_note', null)
 
-      // Update transaction status
       transaction.status = 'failed'
       if (rejectionNote) {
         transaction.rejection_note = rejectionNote
       }
+
       await transaction.save()
 
       return response.ok({
@@ -451,12 +449,19 @@ export default class BowarTransactionController {
         data: {
           id: transaction.id,
           type: transaction.type,
-          amount: parseFloat(transaction.amount.toString()),
+          amount: Number(transaction.amount),
           status: transaction.status,
         },
       })
     } catch (error: any) {
       console.error('Reject error:', error)
+
+      if (error.code === 'E_UNAUTHORIZED_ACCESS') {
+        return response.unauthorized({
+          message: 'Silakan login terlebih dahulu',
+        })
+      }
+
       return response.internalServerError({
         message: 'Terjadi kesalahan saat menolak top up',
       })

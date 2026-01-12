@@ -60,16 +60,28 @@ export function OperatorLoginScreen() {
         return;
       }
 
+      // Clear any existing user session before setting operator session
+      // This ensures operator uses the correct token
+      localStorage.removeItem('auth_user');
+      context?.setUser(null);
+      
       // Verify token was saved (login() function should have saved it)
       // Wait a bit for token to be saved by login() function
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.error('Token not found after login');
+      if (!token || token.trim().length === 0) {
+        console.error('❌ Token not found after login');
+        console.log('Available localStorage keys:', Object.keys(localStorage));
+        console.log('Login response:', response);
         toast.error('Gagal menyimpan token. Silakan coba lagi.');
         return;
       }
+      
+      console.log('✅ Token saved successfully after operator login');
+      console.log('Token length:', token.length);
+      console.log('Token preview:', token.substring(0, 30) + '...');
+      console.log('Token full (first 50 chars):', token.substring(0, 50));
 
       // Set operator in context
       const operator = {
@@ -84,6 +96,16 @@ export function OperatorLoginScreen() {
 
       context?.setOperator(operator);
       localStorage.setItem('auth_operator', JSON.stringify(operator));
+      
+      // Verify token is still there after setting operator
+      const tokenAfterOperatorSet = localStorage.getItem('auth_token');
+      if (!tokenAfterOperatorSet || tokenAfterOperatorSet !== token) {
+        console.error('❌ Token was lost after setting operator!');
+        console.log('Original token:', token.substring(0, 30));
+        console.log('Token after set:', tokenAfterOperatorSet?.substring(0, 30));
+      } else {
+        console.log('✅ Token verified after setting operator');
+      }
       
       toast.success(`Selamat datang, ${backendUser.username}! Mengelola ${cafe.name}`);
       navigate('/operator/dashboard');

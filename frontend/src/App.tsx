@@ -367,10 +367,41 @@ function App() {
   const profileLoadedRef = useRef(false);
   useEffect(() => {
     const loadUserProfile = async () => {
+      // Don't load user profile if operator is logged in
+      const operator = localStorage.getItem('auth_operator');
+      if (operator) {
+        if (import.meta.env.DEV) {
+          console.log('[App] Operator logged in, skipping user profile load');
+        }
+        return;
+      }
+      
       const token = localStorage.getItem('auth_token');
       const storedUser = localStorage.getItem('auth_user');
       
-      if (token && storedUser && !profileLoadedRef.current) {
+      // Wait a bit to ensure token is saved after login (if just logged in)
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Re-check token after delay and check again if operator is logged in
+      const operatorAfterDelay = localStorage.getItem('auth_operator');
+      if (operatorAfterDelay) {
+        if (import.meta.env.DEV) {
+          console.log('[App] Operator logged in after delay, skipping user profile load');
+        }
+        return;
+      }
+      
+      // Re-check token after delay
+      const tokenAfterDelay = localStorage.getItem('auth_token');
+      if (!tokenAfterDelay || tokenAfterDelay.trim().length === 0) {
+        // No token, skip profile loading
+        if (import.meta.env.DEV) {
+          console.log('[App] No token found, skipping profile load');
+        }
+        return;
+      }
+      
+      if (tokenAfterDelay && storedUser && !profileLoadedRef.current) {
         profileLoadedRef.current = true; // Prevent multiple calls
         try {
           // Load full profile from API to get latest data including avatar
@@ -431,13 +462,20 @@ function App() {
         } catch (error) {
           console.error('Failed to load user profile:', error);
           profileLoadedRef.current = false; // Reset on error to allow retry
-          // If token is invalid, clear user
+          // If token is invalid, clear user (but don't clear if operator is logged in)
+          // Only clear if this is a persistent 401 (not a temporary issue)
           if (error && typeof error === 'object' && 'response' in error) {
             const axiosError = error as { response?: { status?: number } };
             if (axiosError.response?.status === 401) {
-              setUser(null);
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('auth_user');
+              // Double-check token still exists before clearing
+              const tokenStillExists = localStorage.getItem('auth_token');
+              // Only clear if token doesn't exist or if this is not an operator session
+              const operator = localStorage.getItem('auth_operator');
+              if (!operator && (!tokenStillExists || tokenStillExists.trim().length === 0)) {
+                setUser(null);
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+              }
             }
           }
         }

@@ -30,6 +30,21 @@ export function LoginScreen() {
         password,
       });
 
+      // Verify token was saved after login (wait a bit for localStorage to sync)
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const token = localStorage.getItem('auth_token');
+      if (!token || token.trim().length === 0) {
+        console.error('❌ Token not found after login');
+        console.log('Available localStorage keys:', Object.keys(localStorage));
+        console.log('Login response:', response);
+        toast.error('Gagal menyimpan token. Silakan coba lagi.');
+        return;
+      }
+      
+      console.log('✅ Token saved successfully after login');
+      console.log('Token length:', token.length);
+      console.log('Token preview:', token.substring(0, 30) + '...');
+
       const backendUser = response.user;
 
       // ✅ MAPPING ROLE BACKEND → FRONTEND (TYPE-SAFE)

@@ -34,12 +34,17 @@ api.interceptors.request.use(
       return url === endpoint || url.startsWith(endpoint + '/');
     });
     
+    // Always try to get token from localStorage
     const token = localStorage.getItem('auth_token');
+    
     if (token && token.trim().length > 0) {
       // Ensure token doesn't already have "Bearer " prefix
       const cleanToken = token.startsWith('Bearer ') ? token.substring(7).trim() : token.trim();
       
       // Set Authorization header (both lowercase and capitalized for compatibility)
+      if (!config.headers) {
+        config.headers = {} as any;
+      }
       config.headers.Authorization = `Bearer ${cleanToken}`;
       config.headers.authorization = `Bearer ${cleanToken}`; // Also set lowercase version
       
@@ -50,12 +55,27 @@ api.interceptors.request.use(
         console.log('   Token preview:', cleanToken.substring(0, 30) + '...');
         console.log('   Authorization header set:', !!config.headers.Authorization);
         console.log('   Full Authorization header:', config.headers.Authorization?.substring(0, 50) + '...');
+        
+        // Extra logging for bowar-transactions requests
+        if (config.url?.includes('bowar-transactions')) {
+          console.log('🔍 BOWAR-TRANSACTIONS REQUEST DEBUG:');
+          console.log('   URL:', config.url);
+          console.log('   Method:', config.method);
+          console.log('   Token exists:', !!token);
+          console.log('   Token length:', cleanToken.length);
+          console.log('   Clean token preview:', cleanToken.substring(0, 50) + '...');
+          console.log('   Authorization header:', config.headers.Authorization?.substring(0, 60) + '...');
+          console.log('   All headers keys:', Object.keys(config.headers || {}));
+        }
       }
     } else if (!isPublicEndpoint) {
       // Only warn for protected endpoints in development
       if (import.meta.env.DEV) {
         console.warn('⚠️ No auth token found in localStorage for protected request:', config.url);
         console.warn('   Available localStorage keys:', Object.keys(localStorage));
+        console.warn('   auth_token value:', localStorage.getItem('auth_token'));
+        console.warn('   auth_operator exists:', !!localStorage.getItem('auth_operator'));
+        console.warn('   This request will likely fail with 401 Unauthorized');
       }
     }
     return config;
@@ -315,33 +335,54 @@ export const updateWalletTime = async (walletId: number, remainingMinutes: numbe
 // Get all transactions for authenticated user
 // For operators: can get pending topups by passing status='pending' and type='topup'
 export const getBowarTransactions = async (page = 1, limit = 20, status?: string, type?: string) => {
-  // Verify token exists before making request
+  // Get token directly from localStorage (don't rely on interceptor)
   const token = localStorage.getItem('auth_token');
   if (!token || token.trim().length === 0) {
     console.error('❌ No token found in localStorage for getBowarTransactions');
     throw new Error('No authentication token found');
   }
   
+  // Clean token (remove Bearer prefix if exists)
+  const cleanToken = token.startsWith('Bearer ') ? token.substring(7).trim() : token.trim();
+  
   // Log token info for debugging (only in dev mode)
   if (import.meta.env.DEV) {
-    console.log('🔍 getBowarTransactions - Token exists, length:', token.length);
-    console.log('   Token preview:', token.substring(0, 30) + '...');
+    console.log('🔍 getBowarTransactions - Token exists, length:', cleanToken.length);
+    console.log('   Token preview:', cleanToken.substring(0, 30) + '...');
     console.log('   Request params:', { page, limit, status, type });
   }
   
   try {
+    // Make request with explicit Authorization header to ensure it's sent
     const response = await api.get('/bowar-transactions', {
       params: { page, limit, ...(status && { status }), ...(type && { type }) },
+      headers: {
+        'Authorization': `Bearer ${cleanToken}`,
+        'authorization': `Bearer ${cleanToken}`, // Also set lowercase
+      },
     });
     return response.data;
   } catch (error: any) {
     // Log detailed error info
     if (import.meta.env.DEV) {
+      const tokenAfterError = localStorage.getItem('auth_token');
+      const cleanTokenAfterError = tokenAfterError?.startsWith('Bearer ') 
+        ? tokenAfterError.substring(7).trim() 
+        : tokenAfterError?.trim() || '';
+      
       console.error('❌ getBowarTransactions error:', {
         status: error.response?.status,
         message: error.response?.data?.message,
         url: error.config?.url,
-        headers: error.config?.headers,
+        method: error.config?.method,
+        hasAuthHeader: !!error.config?.headers?.Authorization || !!error.config?.headers?.authorization,
+        authHeaderPreview: error.config?.headers?.Authorization?.substring(0, 50) 
+          || error.config?.headers?.authorization?.substring(0, 50) 
+          || 'N/A',
+        tokenExists: !!tokenAfterError,
+        tokenLength: cleanTokenAfterError.length,
+        tokenPreview: cleanTokenAfterError.substring(0, 30),
+        requestHeaders: Object.keys(error.config?.headers || {}),
       });
     }
     throw error;

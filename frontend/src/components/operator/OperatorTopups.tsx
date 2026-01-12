@@ -28,6 +28,7 @@ interface Topup {
   userId?: number;
   username?: string;
   email?: string;
+  userRole?: string;
 }
 
 export function OperatorTopups() {
@@ -35,7 +36,7 @@ export function OperatorTopups() {
   const context = useContext(AppContext);
   const operator = context?.operator;
   
-  const [topups, setTopups] = useState<Topup[]>([]);
+  const [allTopups, setAllTopups] = useState<Topup[]>([]); // Store all topups for filtering
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed' | 'failed'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,16 +49,39 @@ export function OperatorTopups() {
     hasLoadedRef.current = false;
     isLoadingRef.current = false;
     
+    // Wait a bit to ensure token is available
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const token = localStorage.getItem('auth_token');
     if (!token || token.trim().length === 0) {
+      console.error('❌ No token found in reloadTopups');
+      console.log('Available localStorage keys:', Object.keys(localStorage));
+      console.log('auth_operator:', localStorage.getItem('auth_operator'));
+      toast.error('Session expired. Silakan login kembali.');
+      context?.setOperator(null);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_operator');
+      navigate('/operator/login');
       return;
     }
+
+    // Clean token
+    const cleanToken = token.startsWith('Bearer ') 
+      ? token.substring(7).trim() 
+      : token.trim();
+
+    console.log('🔑 Token found in reloadTopups, length:', cleanToken.length);
+    console.log('🔑 Token preview:', cleanToken.substring(0, 30) + '...');
+    console.log('🔑 Full token (first 50 chars):', cleanToken.substring(0, 50));
 
     try {
       isLoadingRef.current = true;
       setLoading(true);
       
-      // For operator, get all topups (backend will return all topups for operators)
+      // Reload all topups
+      console.log('📡 Reloading topups with token...');
+      console.log('📡 Token at request time:', cleanToken.substring(0, 50));
+      console.log('📡 Making request to /bowar-transactions with explicit token...');
       const response = await getBowarTransactions(1, 100, undefined, 'topup');
       
       let topupsData: Topup[] = [];
@@ -70,10 +94,19 @@ export function OperatorTopups() {
       }
       
       console.log('🔄 Reloaded topups:', topupsData.length, topupsData);
-      setTopups(topupsData);
+      setAllTopups(topupsData); // Store all topups
+      // Filter will be applied by filteredTopups useMemo
       hasLoadedRef.current = true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to reload topups:', error);
+      const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
+      if (axiosError.response?.status === 401) {
+        toast.error('Sesi telah berakhir. Silakan login kembali.');
+        context?.setOperator(null);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_operator');
+        navigate('/operator/login');
+      }
     } finally {
       setLoading(false);
       isLoadingRef.current = false;
@@ -87,13 +120,34 @@ export function OperatorTopups() {
       return;
     }
 
+    // Check token first before loading
+    const token = localStorage.getItem('auth_token');
+    if (!token || token.trim().length === 0) {
+      console.error('❌ No token found when loading topups');
+      console.log('Available localStorage keys:', Object.keys(localStorage));
+      console.log('Operator data:', operator);
+      toast.error('Session expired. Silakan login kembali.');
+      context?.setOperator(null);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_operator');
+      navigate('/operator/login');
+      return;
+    }
+
     if (isLoadingRef.current || hasLoadedRef.current) {
       return;
     }
 
     const loadTopups = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token || token.trim().length === 0) {
+      // Wait a bit to ensure token is fully saved and available
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Double-check token before making request
+      const currentToken = localStorage.getItem('auth_token');
+      if (!currentToken || currentToken.trim().length === 0) {
+        console.error('❌ Token disappeared before request');
+        console.log('Available localStorage keys:', Object.keys(localStorage));
+        console.log('auth_operator:', localStorage.getItem('auth_operator'));
         toast.error('Session expired. Silakan login kembali.');
         context?.setOperator(null);
         localStorage.removeItem('auth_token');
@@ -102,11 +156,25 @@ export function OperatorTopups() {
         return;
       }
 
+      // Clean token
+      const cleanToken = currentToken.startsWith('Bearer ') 
+        ? currentToken.substring(7).trim() 
+        : currentToken.trim();
+
+      console.log('🔑 Token found, length:', cleanToken.length);
+      console.log('🔑 Token preview:', cleanToken.substring(0, 30) + '...');
+      console.log('🔑 Full token (first 50 chars):', cleanToken.substring(0, 50));
+      console.log('🔑 Operator data:', localStorage.getItem('auth_operator'));
+
       try {
         isLoadingRef.current = true;
         setLoading(true);
         
         // For operator, get all topups (backend will return all topups for operators)
+        // Load all topups so we can filter by status
+        console.log('📡 Requesting topups with token...');
+        console.log('📡 Token at request time:', cleanToken.substring(0, 50));
+        console.log('📡 Making request to /bowar-transactions with explicit token...');
         const response = await getBowarTransactions(1, 100, undefined, 'topup');
         
         let topupsData: Topup[] = [];
@@ -119,7 +187,7 @@ export function OperatorTopups() {
         }
         
         console.log('📊 Loaded topups:', topupsData.length, topupsData);
-        setTopups(topupsData);
+        setAllTopups(topupsData); // Store all topups (filtering will be applied by filteredTopups useMemo)
         hasLoadedRef.current = true;
       } catch (error: unknown) {
         const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
@@ -150,11 +218,12 @@ export function OperatorTopups() {
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operator?.id, navigate, context]);
 
   // Filter and search topups
   const filteredTopups = useMemo(() => {
-    let filtered = [...topups];
+    let filtered = [...allTopups]; // Use allTopups instead of topups
 
     // Apply status filter
     if (filterStatus !== 'all') {
@@ -179,17 +248,17 @@ export function OperatorTopups() {
     return filtered.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [topups, filterStatus, searchQuery]);
+  }, [allTopups, filterStatus, searchQuery]);
 
   // Statistics
   const stats = useMemo(() => {
     return {
-      total: topups.length,
-      pending: topups.filter((t) => t.status === 'pending').length,
-      completed: topups.filter((t) => t.status === 'completed').length,
-      failed: topups.filter((t) => t.status === 'failed').length,
+      total: allTopups.length,
+      pending: allTopups.filter((t) => t.status === 'pending').length,
+      completed: allTopups.filter((t) => t.status === 'completed').length,
+      failed: allTopups.filter((t) => t.status === 'failed').length,
     };
-  }, [topups]);
+  }, [allTopups]);
 
   if (!operator) {
     navigate('/operator/login');

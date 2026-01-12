@@ -58,19 +58,19 @@ export function OperatorTopupConfirmScreen() {
     const loadTopup = async () => {
       try {
         setLoading(true);
-        const response = await getBowarTransactions(1, 50, 'pending', 'topup');
-        
-        let topups: PendingTopup[] = [];
-        if (response.data && Array.isArray(response.data)) {
-          topups = response.data;
-        } else if (response.data?.data && Array.isArray(response.data.data)) {
-          topups = response.data.data;
-        } else if (response.data?.transactions && Array.isArray(response.data.transactions)) {
-          topups = response.data.transactions;
-        }
 
-        const foundTopup = topups.find(t => t.id === parseInt(topupId));
-        
+        const response = await getBowarTransactions(1, 50, 'pending', 'topup');
+
+        const topups: PendingTopup[] =
+          Array.isArray(response?.data) ? response.data :
+          Array.isArray(response?.data?.data) ? response.data.data :
+          Array.isArray(response?.data?.transactions) ? response.data.transactions :
+          [];
+
+        const foundTopup = topups.find(
+          t => t.id === Number(topupId)
+        );
+
         if (!foundTopup) {
           toast.error('Top up tidak ditemukan atau sudah diproses');
           navigate('/operator/topups');
@@ -78,17 +78,19 @@ export function OperatorTopupConfirmScreen() {
         }
 
         setTopup(foundTopup);
-      } catch (error: unknown) {
+      } catch (error: any) {
         console.error('Load topup error:', error);
-        const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
-        if (axiosError.response?.status === 401) {
+
+        if (error?.response?.status === 401) {
           toast.error('Sesi telah berakhir. Silakan login kembali.');
           context?.setOperator(null);
           localStorage.removeItem('auth_token');
           localStorage.removeItem('auth_operator');
           navigate('/operator/login');
         } else {
-          toast.error(axiosError.response?.data?.message || 'Gagal memuat detail top up');
+          toast.error(
+            error?.response?.data?.message || 'Gagal memuat detail top up'
+          );
           navigate('/operator/topups');
         }
       } finally {
@@ -97,7 +99,8 @@ export function OperatorTopupConfirmScreen() {
     };
 
     loadTopup();
-  }, [topupId, operator, navigate, context]);
+  }, [topupId, operator?.id]);
+
 
   const handleApprove = async () => {
     if (!topup) return;
