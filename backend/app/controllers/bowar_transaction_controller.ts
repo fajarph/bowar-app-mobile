@@ -378,15 +378,33 @@ export default class BowarTransactionController {
         })
       }
 
-      // Add balance to user
-      transactionOwner.bowar_wallet = (transactionOwner.bowar_wallet || 0) + parseFloat(transaction.amount.toString())
+      // Get current balance (ensure it's a number)
+      const currentBalance = Number(transactionOwner.bowar_wallet) || 0
+      const topupAmount = Number(transaction.amount) || 0
+      
+      // Calculate new balance
+      const newBalance = currentBalance + topupAmount
+
+      // Update user balance - IMPORTANT: This adds the topup amount to user's wallet
+      transactionOwner.bowar_wallet = newBalance
       await transactionOwner.save()
+
+      // Verify the balance was updated
+      await transactionOwner.refresh()
+      if (Number(transactionOwner.bowar_wallet) !== newBalance) {
+        console.error('❌ Balance update failed! Expected:', newBalance, 'Got:', transactionOwner.bowar_wallet)
+        return response.internalServerError({
+          message: 'Gagal mengupdate saldo user',
+        })
+      }
 
       // Update transaction status and save approval info
       transaction.status = 'completed'
       transaction.approved_by = user.id
       transaction.approved_at = DateTime.now()
       await transaction.save()
+
+      console.log(`✅ Topup approved: User ${transactionOwner.id} balance updated from ${currentBalance} to ${newBalance} (added ${topupAmount})`)
 
       return response.ok({
         message: 'Top up berhasil disetujui',

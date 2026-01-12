@@ -396,6 +396,11 @@ export function DompetBowarScreen() {
                               Selesai
                             </span>
                           )}
+                          {tx.status === 'failed' && (
+                            <span className="px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-full text-red-400 text-xs">
+                              Ditolak
+                            </span>
+                          )}
                         </div>
                         <p className="text-slate-500 text-xs">
                           {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('id-ID', {
