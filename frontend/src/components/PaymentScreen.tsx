@@ -84,34 +84,34 @@ export function PaymentScreen() {
 
     setIsProcessing(true);
 
-    // Simulate payment processing
     setTimeout(() => {
-      // Deduct from DompetBowar
+      // ✅ POTONG SALDO HANYA SEKALI
       context?.setUser((prev: User | null) => {
         if (!prev) return prev;
-        
-        const updatedUser = {
+
+        const newBalance = (prev.bowarWallet || 0) - totalPrice;
+
+        return {
           ...prev,
-          bowarWallet: (prev.bowarWallet || 0) - totalPrice,
+          bowarWallet: newBalance,
         };
-
-        // Sync to registeredUsers
-        context.registeredUsers.forEach((u) => {
-          if (u.id === prev.id) {
-            u.bowarWallet = updatedUser.bowarWallet;
-          }
-        });
-
-        return updatedUser;
       });
 
-      // Update booking to paid
+      // ✅ JANGAN sync manual ke registeredUsers (INI SUMBER BUG)
+      // ❌ HAPUS BLOK INI:
+      // context.registeredUsers.forEach((u) => {
+      //   if (u.id === prev.id) {
+      //     u.bowarWallet = updatedUser.bowarWallet;
+      //   }
+      // });
+
+      // Update booking
       context?.updateBooking(bookingId!, {
         paymentStatus: 'paid',
-        canCancelUntil: Date.now() + 120000, // 2 minutes from now
+        canCancelUntil: Date.now() + 120000,
       });
 
-      // For members at THIS cafe, add time to wallet
+      // Tambah waktu untuk member
       if (context?.user?.role === 'member' && booking?.cafeId) {
         const existingWallet = context.user.cafeWallets?.find(
           (w) => w.cafeId === booking.cafeId
@@ -125,7 +125,6 @@ export function PaymentScreen() {
       toast.success('✅ Pembayaran berhasil via DompetBowar!');
       setIsProcessing(false);
 
-      // Navigate to booking history
       setTimeout(() => {
         navigate('/booking-history');
       }, 1500);

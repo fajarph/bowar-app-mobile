@@ -207,7 +207,12 @@ export default class OperatorController {
             senderName: t.sender_name,
           }
         }),
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      ].sort((a, b) => {
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        return timeB - timeA
+      })
+
 
       return response.ok({
         message: 'Statistik berhasil diambil',

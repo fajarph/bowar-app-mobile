@@ -7,7 +7,7 @@ import axios from 'axios';
  * 
  * Default: http://localhost:3333 (default AdonisJS port)
  */
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Create axios instance
 const api = axios.create({
@@ -15,6 +15,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'ngrok-skip-browser-warning': 'true', // Bypass ngrok warning page
   },
 });
 
@@ -27,27 +28,27 @@ api.interceptors.request.use(
       '/register',
       '/warnets',
     ];
-    
+
     // Check if this is a public endpoint (exact match or starts with)
     const isPublicEndpoint = config.url && publicEndpoints.some(endpoint => {
       const url = config.url || '';
       return url === endpoint || url.startsWith(endpoint + '/');
     });
-    
+
     // Always try to get token from localStorage
     const token = localStorage.getItem('auth_token');
-    
+
     if (token && token.trim().length > 0) {
       // Ensure token doesn't already have "Bearer " prefix
       const cleanToken = token.startsWith('Bearer ') ? token.substring(7).trim() : token.trim();
-      
+
       // Set Authorization header (both lowercase and capitalized for compatibility)
       if (!config.headers) {
         config.headers = {} as any;
       }
       config.headers.Authorization = `Bearer ${cleanToken}`;
       config.headers.authorization = `Bearer ${cleanToken}`; // Also set lowercase version
-      
+
       // Debug logging in development
       if (import.meta.env.DEV && !isPublicEndpoint) {
         console.log('✅ Token added to request:', config.url);
@@ -55,7 +56,7 @@ api.interceptors.request.use(
         console.log('   Token preview:', cleanToken.substring(0, 30) + '...');
         console.log('   Authorization header set:', !!config.headers.Authorization);
         console.log('   Full Authorization header:', config.headers.Authorization?.substring(0, 50) + '...');
-        
+
         // Extra logging for bowar-transactions requests
         if (config.url?.includes('bowar-transactions')) {
           console.log('🔍 BOWAR-TRANSACTIONS REQUEST DEBUG:');
@@ -92,10 +93,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Check if this is an operator request
       const url = error.config?.url || '';
-      const isOperatorRequest = url.includes('/operator/') || 
-                                url.includes('/bowar-transactions') && 
-                                localStorage.getItem('auth_operator');
-      
+      const isOperatorRequest = url.includes('/operator/') ||
+        url.includes('/bowar-transactions') &&
+        localStorage.getItem('auth_operator');
+
       // For operator requests, don't automatically clear operator data
       // Let the component handle the error gracefully
       if (!isOperatorRequest) {
@@ -167,7 +168,7 @@ export const login = async (data: {
   // The token object has a .value property that contains the actual token string
   if (response.data?.token) {
     let tokenValue: string | null = null;
-    
+
     // Log token structure for debugging
     console.log('🔍 Token structure:', {
       type: typeof response.data.token,
@@ -176,7 +177,7 @@ export const login = async (data: {
       hasValue: !!(response.data.token as any)?.value,
       valueType: typeof (response.data.token as any)?.value,
     });
-    
+
     if (typeof response.data.token === 'string') {
       // If token is already a string (shouldn't happen with AdonisJS, but handle it)
       tokenValue = response.data.token;
@@ -185,7 +186,7 @@ export const login = async (data: {
       // AdonisJS createToken returns object with .value property
       const tokenObj = response.data.token as any;
       tokenValue = tokenObj.value || tokenObj.token || tokenObj.hash || null;
-      
+
       if (!tokenValue && tokenObj.toString) {
         // Try toString as last resort
         const str = tokenObj.toString();
@@ -194,7 +195,7 @@ export const login = async (data: {
         }
       }
     }
-    
+
     if (tokenValue && typeof tokenValue === 'string' && tokenValue.length > 0) {
       localStorage.setItem('auth_token', tokenValue);
       // Verify token was saved
@@ -210,8 +211,8 @@ export const login = async (data: {
       console.error('❌ Token value not found or invalid in response:', {
         token: response.data.token,
         tokenType: typeof response.data.token,
-        tokenKeys: response.data.token && typeof response.data.token === 'object' 
-          ? Object.keys(response.data.token) 
+        tokenKeys: response.data.token && typeof response.data.token === 'object'
+          ? Object.keys(response.data.token)
           : 'N/A',
         tokenValue: tokenValue,
       });
@@ -341,17 +342,17 @@ export const getBowarTransactions = async (page = 1, limit = 20, status?: string
     console.error('❌ No token found in localStorage for getBowarTransactions');
     throw new Error('No authentication token found');
   }
-  
+
   // Clean token (remove Bearer prefix if exists)
   const cleanToken = token.startsWith('Bearer ') ? token.substring(7).trim() : token.trim();
-  
+
   // Log token info for debugging (only in dev mode)
   if (import.meta.env.DEV) {
     console.log('🔍 getBowarTransactions - Token exists, length:', cleanToken.length);
     console.log('   Token preview:', cleanToken.substring(0, 30) + '...');
     console.log('   Request params:', { page, limit, status, type });
   }
-  
+
   try {
     // Make request with explicit Authorization header to ensure it's sent
     const response = await api.get('/bowar-transactions', {
@@ -366,18 +367,18 @@ export const getBowarTransactions = async (page = 1, limit = 20, status?: string
     // Log detailed error info
     if (import.meta.env.DEV) {
       const tokenAfterError = localStorage.getItem('auth_token');
-      const cleanTokenAfterError = tokenAfterError?.startsWith('Bearer ') 
-        ? tokenAfterError.substring(7).trim() 
+      const cleanTokenAfterError = tokenAfterError?.startsWith('Bearer ')
+        ? tokenAfterError.substring(7).trim()
         : tokenAfterError?.trim() || '';
-      
+
       console.error('❌ getBowarTransactions error:', {
         status: error.response?.status,
         message: error.response?.data?.message,
         url: error.config?.url,
         method: error.config?.method,
         hasAuthHeader: !!error.config?.headers?.Authorization || !!error.config?.headers?.authorization,
-        authHeaderPreview: error.config?.headers?.Authorization?.substring(0, 50) 
-          || error.config?.headers?.authorization?.substring(0, 50) 
+        authHeaderPreview: error.config?.headers?.Authorization?.substring(0, 50)
+          || error.config?.headers?.authorization?.substring(0, 50)
           || 'N/A',
         tokenExists: !!tokenAfterError,
         tokenLength: cleanTokenAfterError.length,
