@@ -18,6 +18,8 @@ const CafeWalletController = () => import('../app/controllers/cafe_wallet_contro
 const BowarTransactionController = () =>
   import('../app/controllers/bowar_transaction_controller.js')
 const OperatorController = () => import('../app/controllers/operator_controller.js')
+const BookingController = () => import('../app/controllers/booking_controller.js')
+const OperatorBookingsController = () => import('../app/controllers/operator_bookings_controller.js')
 
 router.get('/', async () => {
   return {
@@ -94,3 +96,14 @@ router
 router
   .get('/operator/warnet/:warnetId/statistics', [OperatorController, 'getStatistics'])
   .use(middleware.auth())
+
+// Booking Routes (Protected)
+router.post('/bookings', [BookingController, 'create']).use(middleware.auth())
+router.get('/bookings', [BookingController, 'index']).use(middleware.auth())
+router.post('/bookings/:id/cancel', [BookingController, 'cancel']).use(middleware.auth())
+
+// Operator Booking Management Routes (Protected - operators only)
+router.get('/operator/bookings', [OperatorBookingsController, 'index']).use(middleware.auth())
+router.get('/operator/bookings/pending', [OperatorBookingsController, 'pending']).use(middleware.auth())
+router.post('/operator/bookings/:id/approve', [OperatorBookingsController, 'approve']).use(middleware.auth())
+router.post('/operator/bookings/:id/reject', [OperatorBookingsController, 'reject']).use(middleware.auth())

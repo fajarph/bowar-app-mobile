@@ -1,12 +1,12 @@
 import { useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
-import { 
-  Wallet, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Search, 
+import {
+  Wallet,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Search,
   User,
   Mail,
   Image as ImageIcon,
@@ -35,12 +35,13 @@ export function OperatorTopups() {
   const navigate = useNavigate();
   const context = useContext(AppContext);
   const operator = context?.operator;
-  
+
   const [allTopups, setAllTopups] = useState<Topup[]>([]); // Store all topups for filtering
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed' | 'failed'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
-  
+  const [imageModal, setImageModal] = useState<string | null>(null);
+
   const hasLoadedRef = useRef(false);
   const isLoadingRef = useRef(false);
 
@@ -48,10 +49,10 @@ export function OperatorTopups() {
   const reloadTopups = async () => {
     hasLoadedRef.current = false;
     isLoadingRef.current = false;
-    
+
     // Wait a bit to ensure token is available
     await new Promise(resolve => setTimeout(resolve, 500));
-    
+
     const token = localStorage.getItem('auth_token');
     if (!token || token.trim().length === 0) {
       console.error('❌ No token found in reloadTopups');
@@ -66,8 +67,8 @@ export function OperatorTopups() {
     }
 
     // Clean token
-    const cleanToken = token.startsWith('Bearer ') 
-      ? token.substring(7).trim() 
+    const cleanToken = token.startsWith('Bearer ')
+      ? token.substring(7).trim()
       : token.trim();
 
     console.log('🔑 Token found in reloadTopups, length:', cleanToken.length);
@@ -77,13 +78,13 @@ export function OperatorTopups() {
     try {
       isLoadingRef.current = true;
       setLoading(true);
-      
+
       // Reload all topups
       console.log('📡 Reloading topups with token...');
       console.log('📡 Token at request time:', cleanToken.substring(0, 50));
       console.log('📡 Making request to /bowar-transactions with explicit token...');
       const response = await getBowarTransactions(1, 100, undefined, 'topup');
-      
+
       let topupsData: Topup[] = [];
       if (response.data && Array.isArray(response.data)) {
         topupsData = response.data;
@@ -92,7 +93,7 @@ export function OperatorTopups() {
       } else if (response.data?.transactions && Array.isArray(response.data.transactions)) {
         topupsData = response.data.transactions;
       }
-      
+
       console.log('🔄 Reloaded topups:', topupsData.length, topupsData);
       setAllTopups(topupsData); // Store all topups
       // Filter will be applied by filteredTopups useMemo
@@ -141,7 +142,7 @@ export function OperatorTopups() {
     const loadTopups = async () => {
       // Wait a bit to ensure token is fully saved and available
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Double-check token before making request
       const currentToken = localStorage.getItem('auth_token');
       if (!currentToken || currentToken.trim().length === 0) {
@@ -157,8 +158,8 @@ export function OperatorTopups() {
       }
 
       // Clean token
-      const cleanToken = currentToken.startsWith('Bearer ') 
-        ? currentToken.substring(7).trim() 
+      const cleanToken = currentToken.startsWith('Bearer ')
+        ? currentToken.substring(7).trim()
         : currentToken.trim();
 
       console.log('🔑 Token found, length:', cleanToken.length);
@@ -169,14 +170,14 @@ export function OperatorTopups() {
       try {
         isLoadingRef.current = true;
         setLoading(true);
-        
+
         // For operator, get all topups (backend will return all topups for operators)
         // Load all topups so we can filter by status
         console.log('📡 Requesting topups with token...');
         console.log('📡 Token at request time:', cleanToken.substring(0, 50));
         console.log('📡 Making request to /bowar-transactions with explicit token...');
         const response = await getBowarTransactions(1, 100, undefined, 'topup');
-        
+
         let topupsData: Topup[] = [];
         if (response.data && Array.isArray(response.data)) {
           topupsData = response.data;
@@ -185,7 +186,7 @@ export function OperatorTopups() {
         } else if (response.data?.transactions && Array.isArray(response.data.transactions)) {
           topupsData = response.data.transactions;
         }
-        
+
         console.log('📊 Loaded topups:', topupsData.length, topupsData);
         setAllTopups(topupsData); // Store all topups (filtering will be applied by filteredTopups useMemo)
         hasLoadedRef.current = true;
@@ -245,7 +246,7 @@ export function OperatorTopups() {
     }
 
     // Sort by date (newest first)
-    return filtered.sort((a, b) => 
+    return filtered.sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }, [allTopups, filterStatus, searchQuery]);
@@ -304,41 +305,37 @@ export function OperatorTopups() {
           <div className="flex items-center gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => setFilterStatus('all')}
-              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${
-                filterStatus === 'all'
-                  ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${filterStatus === 'all'
+                ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               Semua ({stats.total})
             </button>
             <button
               onClick={() => setFilterStatus('pending')}
-              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${
-                filterStatus === 'pending'
-                  ? 'bg-amber-500/20 border border-amber-500/50 text-amber-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${filterStatus === 'pending'
+                ? 'bg-amber-500/20 border border-amber-500/50 text-amber-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               Pending ({stats.pending})
             </button>
             <button
               onClick={() => setFilterStatus('completed')}
-              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${
-                filterStatus === 'completed'
-                  ? 'bg-green-500/20 border border-green-500/50 text-green-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${filterStatus === 'completed'
+                ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               Completed ({stats.completed})
             </button>
             <button
               onClick={() => setFilterStatus('failed')}
-              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${
-                filterStatus === 'failed'
-                  ? 'bg-red-500/20 border border-red-500/50 text-red-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm whitespace-nowrap transition-all ${filterStatus === 'failed'
+                ? 'bg-red-500/20 border border-red-500/50 text-red-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               Failed ({stats.failed})
             </button>
@@ -360,8 +357,8 @@ export function OperatorTopups() {
                 <Wallet className="w-10 h-10 text-slate-600" />
               </div>
               <p className="text-slate-400 mb-2">
-                {searchQuery || filterStatus !== 'all' 
-                  ? 'Tidak ada top up yang sesuai filter' 
+                {searchQuery || filterStatus !== 'all'
+                  ? 'Tidak ada top up yang sesuai filter'
                   : 'Belum ada top up'}
               </p>
               <p className="text-slate-500 text-sm">
@@ -382,13 +379,12 @@ export function OperatorTopups() {
                   {/* Left: Status & Info */}
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     {/* Status Icon */}
-                    <div className={`flex-shrink-0 rounded-xl p-2 ${
-                      topup.status === 'pending'
-                        ? 'bg-amber-500/20 border border-amber-500/30'
-                        : topup.status === 'completed'
+                    <div className={`flex-shrink-0 rounded-xl p-2 ${topup.status === 'pending'
+                      ? 'bg-amber-500/20 border border-amber-500/30'
+                      : topup.status === 'completed'
                         ? 'bg-green-500/20 border border-green-500/30'
                         : 'bg-red-500/20 border border-red-500/30'
-                    }`}>
+                      }`}>
                       {topup.status === 'pending' ? (
                         <Clock className="w-5 h-5 text-amber-400" />
                       ) : topup.status === 'completed' ? (
@@ -440,21 +436,43 @@ export function OperatorTopups() {
                       )}
 
                       {/* Meta Info */}
-                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                          {topup.proofImage && (
+                            <div className="flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3" />
+                              <span>Bukti tersedia</span>
+                            </div>
+                          )}
+                          <span>
+                            {new Date(topup.createdAt).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+
+                        {/* Thumbnail Preview */}
                         {topup.proofImage && (
-                          <div className="flex items-center gap-1">
-                            <ImageIcon className="w-3 h-3" />
-                            <span>Bukti tersedia</span>
+                          <div className="relative group/img w-16 h-16 rounded-lg overflow-hidden border border-slate-700/50">
+                            <img
+                              src={topup.proofImage}
+                              alt="Bukti thumbnail"
+                              className="w-full h-full object-cover group-hover/img:scale-110 transition-transform"
+                            />
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setImageModal(topup.proofImage || null);
+                              }}
+                              className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center cursor-pointer transition-opacity"
+                            >
+                              <Search className="w-4 h-4 text-white" />
+                            </div>
                           </div>
                         )}
-                        <span>
-                          {new Date(topup.createdAt).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -474,6 +492,24 @@ export function OperatorTopups() {
           </div>
         )}
       </div>
+
+      {/* Modal Components */}
+      {imageModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setImageModal(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img src={imageModal} alt="Top Up Proof Fullscreen" className="w-full h-full object-contain rounded-2xl" />
+            <button
+              onClick={() => setImageModal(null)}
+              className="absolute top-4 right-4 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <OperatorBottomNav />

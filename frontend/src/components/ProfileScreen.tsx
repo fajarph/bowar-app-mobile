@@ -103,7 +103,7 @@ export function ProfileScreen() {
             <div className="relative mb-4">
               {/* Glow ring */}
               <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 to-purple-500 rounded-full blur-xl opacity-40" />
-              
+
               {/* Avatar container */}
               <div className="relative w-28 h-28 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border-2 border-cyan-500/50 flex items-center justify-center overflow-hidden">
                 {context?.user?.avatar ? (
@@ -156,11 +156,10 @@ export function ProfileScreen() {
                   allMemberships.map((wallet) => (
                     <div
                       key={`${wallet.userId}-${wallet.cafeId}`}
-                      className={`bg-slate-900/50 border rounded-2xl p-4 ${
-                        wallet.isCurrentAccount
+                      className={`bg-slate-900/50 border rounded-2xl p-4 ${wallet.isCurrentAccount
                           ? 'border-blue-500/50 bg-blue-500/5'
                           : 'border-slate-700/30'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex-1">
@@ -224,12 +223,26 @@ export function ProfileScreen() {
             </div>
             <ChevronRight className="w-5 h-5 text-cyan-400 group-hover:translate-x-1 transition-transform" />
           </div>
-          
+
           <div className="bg-slate-900/50 border border-slate-700/30 rounded-2xl p-4">
-            <p className="text-slate-400 text-xs mb-1">Saldo Tersedia</p>
+            <p className="text-slate-400 text-xs mb-1">Total Saldo di Semua Warnet</p>
             <p className="text-3xl text-cyan-400 tabular-nums">
-              Rp {(context?.user?.bowarWallet || 0).toLocaleString()}
+              Rp {(() => {
+                const total = context?.user?.cafeWallets?.reduce((sum, w) => sum + (Number(w.balance) || 0), 0) || 0;
+                return total.toLocaleString();
+              })()}
             </p>
+            {(() => {
+              const count = context?.user?.cafeWallets?.filter(w => (Number(w.balance) || 0) > 0).length || 0;
+              if (count > 0) {
+                return (
+                  <p className="text-slate-500 text-[10px] mt-1 italic">
+                    Tersedia di {count} warnet berbeda
+                  </p>
+                );
+              }
+              return null;
+            })()}
           </div>
         </button>
 
@@ -361,7 +374,7 @@ export function ProfileScreen() {
               Daftar Membership Baru
             </AlertDialogTitle>
             <AlertDialogDescription className="text-slate-300">
-              Anda akan diarahkan ke halaman registrasi untuk membuat akun member baru di cafe lain. 
+              Anda akan diarahkan ke halaman registrasi untuk membuat akun member baru di cafe lain.
               Pastikan menggunakan email yang sama ({context?.user?.email}) dengan username yang berbeda.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -31,7 +31,7 @@ export function CafeDetailsScreen() {
   useEffect(() => {
     const loadWarnetDetail = async () => {
       if (!cafeId) return;
-      
+
       try {
         setLoading(true);
         const response = await getWarnetDetail(Number(cafeId));
@@ -99,14 +99,7 @@ export function CafeDetailsScreen() {
 
           {/* Member Badge */}
           {context?.user?.role === "member" &&
-            context.user.cafeWallets?.some(
-              (w) => {
-                // Convert both to string for comparison to handle number/string mismatch
-                const walletCafeId = String(w.cafeId);
-                const currentCafeId = String(cafe?.id || '');
-                return walletCafeId === currentCafeId;
-              }
-            ) && (
+            String(context.user.warnet?.id || '') === String(cafeId || '') && (
               <div className="absolute top-6 right-6 bg-gradient-to-r from-cyan-500/90 to-purple-500/90 backdrop-blur-xl border border-cyan-400/50 rounded-full px-4 py-2 flex items-center gap-2 shadow-lg shadow-cyan-500/30">
                 <Crown className="w-4 h-4 text-white" />
                 <span className="text-white text-sm">

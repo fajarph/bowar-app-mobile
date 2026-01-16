@@ -56,14 +56,14 @@ export default class OperatorController {
             bowarWallet: member.bowar_wallet || 0,
             cafeWallets: wallet
               ? [
-                  {
-                    cafeId: wallet.warnet_id.toString(),
-                    cafeName: (await Warnet.find(wallet.warnet_id))?.name || '',
-                    remainingMinutes: wallet.remaining_minutes,
-                    isActive: wallet.is_active,
-                    lastUpdated: wallet.last_updated.toMillis(),
-                  },
-                ]
+                {
+                  cafeId: wallet.warnet_id.toString(),
+                  cafeName: (await Warnet.find(wallet.warnet_id))?.name || '',
+                  remainingMinutes: wallet.remaining_minutes,
+                  isActive: wallet.is_active,
+                  lastUpdated: wallet.last_updated.toMillis(),
+                },
+              ]
               : [],
             createdAt: member.createdAt.toISO(),
           }
@@ -149,6 +149,14 @@ export default class OperatorController {
         .count('* as total')
       const pendingTopupsCount = parseInt(pendingTopups[0].$extras.total.toString())
 
+      // Get pending booking payments count
+      const pendingBookings = await Booking.query()
+        .where('warnet_id', warnetId)
+        .where('payment_status', 'pending')
+        .whereNot('status', 'cancelled')
+        .count('* as total')
+      const pendingBookingsCount = parseInt(pendingBookings[0].$extras.total.toString())
+
       // Get all transactions for this warnet (bookings payments)
       const bookingTransactions = await Booking.query()
         .where('warnet_id', warnetId)
@@ -158,22 +166,24 @@ export default class OperatorController {
         .preload('user')
         .limit(50)
 
+
+
       // Get top-up transactions from members of this warnet
       const warnetMemberIds = await User.query()
         .where('warnet_id', warnetId)
         .where('role', 'member')
         .select('id')
-      
+
       const memberIds = warnetMemberIds.map((u) => u.id)
-      
+
       const topupTransactions = memberIds.length > 0
         ? await BowarTransaction.query()
-            .whereIn('user_id', memberIds)
-            .where('type', 'topup')
-            .whereBetween('created_at', [startDate.toSQL()!, endDate.toSQL()!])
-            .orderBy('created_at', 'desc')
-            .preload('user')
-            .limit(50)
+          .whereIn('user_id', memberIds)
+          .where('type', 'topup')
+          .whereBetween('created_at', [startDate.toSQL()!, endDate.toSQL()!])
+          .orderBy('created_at', 'desc')
+          .preload('user')
+          .limit(50)
         : []
 
       // Combine and sort all transactions
@@ -222,6 +232,7 @@ export default class OperatorController {
           activeBookings: activeBookings.length,
           totalMembers: membersCount,
           pendingTopups: pendingTopupsCount,
+          pendingBookings: pendingBookingsCount,
           transactions: allTransactions.slice(0, 50), // Limit to 50 most recent
         },
       })

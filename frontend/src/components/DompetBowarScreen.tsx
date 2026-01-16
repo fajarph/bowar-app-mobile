@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { getBowarTransactions, topupBowar, getUserProfile } from '../services/api';
+import { getBowarTransactions, topupBowar, getUserProfile, getWarnets } from '../services/api';
 
 interface BowarTransaction {
   id: number;
@@ -12,6 +12,8 @@ interface BowarTransaction {
   description?: string;
   createdAt?: string;
   status?: string;
+  warnetId?: number;
+  warnetName?: string;
 }
 
 export function DompetBowarScreen() {
@@ -20,42 +22,39 @@ export function DompetBowarScreen() {
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
   const [proofImage, setProofImage] = useState<string>('');
+  const [proofImageFile, setProofImageFile] = useState<File | null>(null);
   const [senderName, setSenderName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedWarnetId, setSelectedWarnetId] = useState<string>('');
+  const [warnets, setWarnets] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const balance = context?.user?.bowarWallet || 0;
   const [transactions, setTransactions] = useState<BowarTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const isLoadingRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
-  
-  // Calculate pending topup amount
-  const pendingTopupAmount = transactions
-    .filter(tx => tx.type === 'topup' && tx.status === 'pending')
-    .reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
   // Load transactions and refresh balance from API
   useEffect(() => {
     const userId = context?.user?.id;
-    
+
     // Skip if no user or already loading
     if (!userId || isLoadingRef.current) {
       return;
     }
-    
+
     // Skip if already loaded for this user (prevent infinite loop)
     if (hasLoadedRef.current && lastUserIdRef.current === userId) {
       return;
     }
-    
+
     const loadTransactionsAndBalance = async () => {
       try {
         isLoadingRef.current = true;
         setLoading(true);
         lastUserIdRef.current = userId;
-        
+
         const response = await getBowarTransactions(1, 20);
         // Backend returns { message, data: { transactions: [], ... } }
         if (response.data && Array.isArray(response.data)) {
@@ -65,27 +64,28 @@ export function DompetBowarScreen() {
         } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
           setTransactions(response.data.data);
         }
-        
+
         // Also refresh balance (only update if different to prevent re-render loop)
         if (context?.user && context.setUser) {
           try {
             const profileResponse = await getUserProfile();
             if (profileResponse.data) {
               const profileData = profileResponse.data;
-              
+
               // Map cafeWallets
               const mappedCafeWallets = profileData.cafeWallets
-                ? profileData.cafeWallets.map((wallet: { cafeId?: string; warnet_id?: number; warnetId?: number; cafeName?: string; warnet_name?: string; warnetName?: string; remainingMinutes?: number; remaining_minutes?: number; isActive?: boolean; is_active?: boolean; lastUpdated?: string; last_updated?: string }) => ({
-                    cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
-                    cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
-                    remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
-                    isActive: wallet.isActive || wallet.is_active || false,
-                    lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
-                  }))
+                ? profileData.cafeWallets.map((wallet: any) => ({
+                  cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+                  cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                  balance: wallet.balance || 0,
+                  remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+                  isActive: wallet.isActive || wallet.is_active || false,
+                  lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+                }))
                 : undefined;
-              
+
               const newBalance = profileData.bowarWallet || profileData.bowar_wallet || 0;
-              
+
               // Only update if balance actually changed (prevent infinite loop)
               if (context.user.bowarWallet !== newBalance) {
                 context.setUser({
@@ -96,6 +96,7 @@ export function DompetBowarScreen() {
                   avatar: profileData.avatar,
                   bowarWallet: newBalance,
                   cafeWallets: mappedCafeWallets,
+                  warnet: profileData.warnet,
                 });
               }
             }
@@ -103,7 +104,7 @@ export function DompetBowarScreen() {
             console.error('Failed to refresh balance:', profileError);
           }
         }
-        
+
         hasLoadedRef.current = true;
       } catch (error: unknown) {
         console.error('Load transactions error:', error);
@@ -118,7 +119,24 @@ export function DompetBowarScreen() {
     };
 
     loadTransactionsAndBalance();
-    
+
+    // Load available warnets for top-up
+    const loadWarnets = async () => {
+      try {
+        const data = await getWarnets();
+        if (data) {
+          setWarnets(data);
+          // If user has a default warnet, select it
+          if (context?.user?.warnet?.id) {
+            setSelectedWarnetId((context.user.warnet.id as any).toString());
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load warnets:', error);
+      }
+    };
+    loadWarnets();
+
     // Refresh when page becomes visible (user returns to tab/app) - only if already loaded
     const handleVisibilityChange = () => {
       if (!document.hidden && userId && !isLoadingRef.current && hasLoadedRef.current) {
@@ -127,7 +145,7 @@ export function DompetBowarScreen() {
         loadTransactionsAndBalance();
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -150,6 +168,9 @@ export function DompetBowarScreen() {
       return;
     }
 
+    // Store file object
+    setProofImageFile(file);
+
     // Read and preview image
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -160,7 +181,7 @@ export function DompetBowarScreen() {
 
   const handleTopUp = async () => {
     const amount = parseInt(topUpAmount);
-    
+
     if (isNaN(amount) || amount < 10000) {
       toast.error('Minimal top up Rp 10.000');
       return;
@@ -183,26 +204,31 @@ export function DompetBowarScreen() {
 
     try {
       setIsSubmitting(true);
-      
-      const response = await topupBowar({
-        amount,
-        description: `Top Up DompetBowar sebesar Rp ${amount.toLocaleString()}`,
-        proofImage: proofImage,
-        senderName: senderName.trim(),
-      });
+
+      const formData = new FormData();
+      formData.append('amount', amount.toString());
+      formData.append('description', `Top Up DompetBowar sebesar Rp ${amount.toLocaleString()}`);
+      formData.append('senderName', senderName.trim());
+      formData.append('warnetId', selectedWarnetId);
+      if (proofImageFile) {
+        formData.append('proofImage', proofImageFile);
+      }
+
+      const response = await topupBowar(formData);
 
       toast.success(response.message || 'Permintaan top up berhasil dibuat. Menunggu konfirmasi.');
-      
+
       // Reset form
       setShowTopUp(false);
       setTopUpAmount('');
       setProofImage('');
+      setProofImageFile(null);
       setSenderName('');
-      
+
       // Reset flags to allow refresh
       hasLoadedRef.current = false;
       lastUserIdRef.current = null;
-      
+
       // Reload transactions and balance
       try {
         isLoadingRef.current = true;
@@ -213,25 +239,26 @@ export function DompetBowarScreen() {
         } else if (transactionsResponse.data && transactionsResponse.data.data && Array.isArray(transactionsResponse.data.data)) {
           setTransactions(transactionsResponse.data.data);
         }
-        
+
         // Reload user profile to get updated balance
         if (context?.user && context.setUser) {
           try {
             const profileResponse = await getUserProfile();
             if (profileResponse.data) {
               const profileData = profileResponse.data;
-              
+
               // Map cafeWallets
               const mappedCafeWallets = profileData.cafeWallets
-                ? profileData.cafeWallets.map((wallet: { cafeId?: string; warnet_id?: number; warnetId?: number; cafeName?: string; warnet_name?: string; warnetName?: string; remainingMinutes?: number; remaining_minutes?: number; isActive?: boolean; is_active?: boolean; lastUpdated?: string; last_updated?: string }) => ({
-                    cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
-                    cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
-                    remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
-                    isActive: wallet.isActive || wallet.is_active || false,
-                    lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
-                  }))
+                ? profileData.cafeWallets.map((wallet: any) => ({
+                  cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+                  cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                  balance: wallet.balance || 0,
+                  remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+                  isActive: wallet.isActive || wallet.is_active || false,
+                  lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+                }))
                 : undefined;
-              
+
               context.setUser({
                 id: String(profileData.id),
                 username: profileData.username,
@@ -240,13 +267,14 @@ export function DompetBowarScreen() {
                 avatar: profileData.avatar,
                 bowarWallet: profileData.bowarWallet || profileData.bowar_wallet || 0,
                 cafeWallets: mappedCafeWallets,
+                warnet: profileData.warnet,
               });
             }
           } catch (profileError) {
             console.error('Failed to reload profile:', profileError);
           }
         }
-        
+
         hasLoadedRef.current = true;
       } catch (error) {
         console.error('Failed to reload transactions:', error);
@@ -257,10 +285,10 @@ export function DompetBowarScreen() {
       }
     } catch (error: unknown) {
       console.error('Topup error:', error);
-      const errorMessage = 
-        (error && typeof error === 'object' && 'response' in error && 
-         error.response && typeof error.response === 'object' && 'data' in error.response &&
-         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
+      const errorMessage =
+        (error && typeof error === 'object' && 'response' in error &&
+          error.response && typeof error.response === 'object' && 'data' in error.response &&
+          error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
           ? String(error.response.data.message)
           : 'Gagal membuat permintaan top up';
       toast.error(errorMessage);
@@ -297,42 +325,51 @@ export function DompetBowarScreen() {
 
       {/* Content */}
       <div className="relative z-10 px-6 py-6 space-y-6">
-        {/* Balance Card */}
-        <div className="bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-3xl p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-400/10 rounded-full blur-3xl" />
-          
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="bg-cyan-500/20 border border-cyan-500/30 rounded-xl p-2">
-                <Wallet className="w-5 h-5 text-cyan-400" />
+        {/* Group balance cards by Warnet */}
+        <div className="space-y-4">
+          <label className="text-slate-400 text-sm px-2">Daftar Saldo Per Warnet</label>
+          {(context?.user?.cafeWallets && context.user.cafeWallets.length > 0) ? (
+            context.user.cafeWallets.map((wallet) => (
+              <div key={wallet.cafeId} className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700/50 rounded-3xl p-6 relative overflow-hidden group hover:border-cyan-500/30 transition-all">
+                <div className="relative flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="bg-cyan-500/20 border border-cyan-500/30 rounded-lg p-1.5">
+                        <Wallet className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <span className="text-slate-300 text-sm font-medium">{wallet.cafeName}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <h2 className="text-2xl text-slate-100 tabular-nums">
+                        Rp {(wallet.balance || 0).toLocaleString()}
+                      </h2>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedWarnetId(wallet.cafeId);
+                      setShowTopUp(true);
+                    }}
+                    className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 p-3 rounded-2xl border border-cyan-500/20 transition-all"
+                    title="Top Up di warnet ini"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-              <span className="text-slate-400 text-sm">Saldo Tersedia</span>
+            ))
+          ) : (
+            <div className="bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl p-8 text-center">
+              <p className="text-slate-500">Belum ada saldo warnet. Silakan lakukan top up pertama Anda.</p>
+              <button
+                onClick={() => setShowTopUp(true)}
+                className="mt-4 text-cyan-400 text-sm flex items-center justify-center gap-2 mx-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Top Up Sekarang</span>
+              </button>
             </div>
-            <h2 className="text-4xl text-slate-100 mb-2 tabular-nums">
-              Rp {balance.toLocaleString()}
-            </h2>
-            {pendingTopupAmount > 0 && (
-              <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
-                <p className="text-amber-300 text-xs">
-                  ⏳ Top up pending: <span className="font-semibold">Rp {pendingTopupAmount.toLocaleString()}</span>
-                  <br />
-                  <span className="text-amber-400/80">Saldo akan ditambahkan setelah konfirmasi admin</span>
-                </p>
-              </div>
-            )}
-            {pendingTopupAmount === 0 && (
-              <div className="mb-6" />
-            )}
-
-            <button
-              onClick={() => setShowTopUp(true)}
-              className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white py-3 rounded-2xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 flex items-center justify-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Top Up Saldo</span>
-            </button>
-          </div>
+          )}
         </div>
 
         {/* Info Card */}
@@ -355,7 +392,7 @@ export function DompetBowarScreen() {
           <div className="px-6 py-4 border-b border-slate-800/50">
             <h3 className="text-slate-200">Riwayat Transaksi</h3>
           </div>
-          
+
           <div className="divide-y divide-slate-800/50">
             {loading ? (
               <div className="px-6 py-8 text-center">
@@ -367,13 +404,12 @@ export function DompetBowarScreen() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1">
                       <div
-                        className={`p-2 rounded-xl ${
-                          tx.type === 'topup'
-                            ? 'bg-green-500/20 border border-green-500/30'
-                            : tx.type === 'refund'
+                        className={`p-2 rounded-xl ${tx.type === 'topup'
+                          ? 'bg-green-500/20 border border-green-500/30'
+                          : tx.type === 'refund'
                             ? 'bg-blue-500/20 border border-blue-500/30'
                             : 'bg-red-500/20 border border-red-500/30'
-                        }`}
+                          }`}
                       >
                         {tx.type === 'topup' ? (
                           <ArrowDownRight className="w-5 h-5 text-green-400" />
@@ -386,6 +422,11 @@ export function DompetBowarScreen() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <p className="text-slate-200 text-sm">{tx.description || 'Transaksi'}</p>
+                          {tx.warnetName && (
+                            <span className="text-cyan-400/60 text-[10px] px-1.5 py-0.5 bg-cyan-500/5 border border-cyan-500/10 rounded">
+                              @{tx.warnetName}
+                            </span>
+                          )}
                           {tx.status === 'pending' && (
                             <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full text-amber-400 text-xs">
                               Pending
@@ -414,9 +455,8 @@ export function DompetBowarScreen() {
                       </div>
                     </div>
                     <span
-                      className={`text-sm font-semibold tabular-nums ${
-                        tx.type === 'payment' ? 'text-red-400' : 'text-green-400'
-                      }`}
+                      className={`text-sm font-semibold tabular-nums ${tx.type === 'payment' ? 'text-red-400' : 'text-green-400'
+                        }`}
                     >
                       {tx.type === 'payment' ? '-' : '+'}Rp {Math.abs(tx.amount || 0).toLocaleString()}
                     </span>
@@ -445,6 +485,24 @@ export function DompetBowarScreen() {
 
             {/* Modal Content */}
             <div className="p-6 space-y-5">
+              {/* Warnet Selection */}
+              <div>
+                <label className="text-slate-300 text-sm mb-2 block">Pilih Warnet Tujuan <span className="text-red-400">*</span></label>
+                <select
+                  value={selectedWarnetId}
+                  onChange={(e) => setSelectedWarnetId(e.target.value)}
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="">-- Pilih Warnet --</option>
+                  {warnets.map((warnet) => (
+                    <option key={warnet.id} value={warnet.id}>
+                      {warnet.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-slate-500 text-xs mt-2">Saldo hanya dapat digunakan di warnet yang dipilih.</p>
+              </div>
+
               {/* Quick Amounts */}
               <div>
                 <label className="text-slate-300 text-sm mb-3 block">Nominal Cepat</label>
@@ -453,11 +511,10 @@ export function DompetBowarScreen() {
                     <button
                       key={amount}
                       onClick={() => setTopUpAmount(amount.toString())}
-                      className={`py-3 rounded-2xl border transition-all ${
-                        topUpAmount === amount.toString()
-                          ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
-                          : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:border-cyan-500/30'
-                      }`}
+                      className={`py-3 rounded-2xl border transition-all ${topUpAmount === amount.toString()
+                        ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
+                        : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:border-cyan-500/30'
+                        }`}
                     >
                       <span className="text-sm">Rp {(amount / 1000).toFixed(0)}k</span>
                     </button>
@@ -511,6 +568,7 @@ export function DompetBowarScreen() {
                     <button
                       onClick={() => {
                         setProofImage('');
+                        setProofImageFile(null);
                         if (fileInputRef.current) {
                           fileInputRef.current.value = '';
                         }
@@ -562,7 +620,7 @@ export function DompetBowarScreen() {
                 </button>
                 <button
                   onClick={handleTopUp}
-                  disabled={!topUpAmount || parseInt(topUpAmount) < 10000 || !proofImage || !senderName.trim() || isSubmitting}
+                  disabled={!topUpAmount || parseInt(topUpAmount) < 10000 || !proofImage || !senderName.trim() || !selectedWarnetId || isSubmitting}
                   className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-2xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 disabled:shadow-none flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (

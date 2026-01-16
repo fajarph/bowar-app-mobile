@@ -26,7 +26,7 @@ export function PaymentScreen() {
   useEffect(() => {
     const loadWarnetDetail = async () => {
       if (!booking?.cafeId) return;
-      
+
       try {
         const response = await getWarnetDetail(Number(booking.cafeId));
         if (response.data) {
@@ -45,7 +45,7 @@ export function PaymentScreen() {
 
   const pricePerHour =
     context?.user?.role === 'member' &&
-    context.user.cafeWallets?.some((w) => w.cafeId === booking?.cafeId)
+      context.user.cafeWallets?.some((w) => w.cafeId === booking?.cafeId)
       ? cafe?.memberPricePerHour || 0
       : cafe?.regularPricePerHour || 0;
 
@@ -248,7 +248,7 @@ export function PaymentScreen() {
         {!paymentMethod && (
           <div className="space-y-4">
             <h3 className="text-slate-200">Pilih Metode Pembayaran</h3>
-            
+
             {/* DompetBowar Option */}
             <button
               onClick={() => {
@@ -258,9 +258,8 @@ export function PaymentScreen() {
                 }
                 setPaymentMethod('bowar');
               }}
-              className={`w-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border rounded-3xl p-5 hover:from-cyan-500/30 hover:to-purple-500/30 transition-all group text-left ${
-                bowarBalance < totalPrice ? 'border-slate-700 opacity-60' : 'border-cyan-500/50 hover:border-cyan-500/70'
-              }`}
+              className={`w-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border rounded-3xl p-5 hover:from-cyan-500/30 hover:to-purple-500/30 transition-all group text-left ${bowarBalance < totalPrice ? 'border-slate-700 opacity-60' : 'border-cyan-500/50 hover:border-cyan-500/70'
+                }`}
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -279,7 +278,7 @@ export function PaymentScreen() {
                   </p>
                 </div>
               </div>
-              
+
               {bowarBalance < totalPrice && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
                   <p className="text-red-400 text-xs">
@@ -287,7 +286,7 @@ export function PaymentScreen() {
                   </p>
                 </div>
               )}
-              
+
               {bowarBalance >= totalPrice && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-3 py-2">
                   <p className="text-green-400 text-xs">
@@ -314,7 +313,7 @@ export function PaymentScreen() {
                 </div>
                 <CreditCard className="w-5 h-5 text-blue-400" />
               </div>
-              
+
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2">
                 <p className="text-blue-400 text-xs">
                   ⏱️ Konfirmasi dalam 1-5 menit setelah upload bukti
@@ -344,7 +343,7 @@ export function PaymentScreen() {
               </div>
               <h3 className="text-slate-200">Informasi Transfer</h3>
             </div>
-            
+
             <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border border-blue-500/30 rounded-2xl p-4 mb-4">
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
@@ -397,7 +396,7 @@ export function PaymentScreen() {
               </div>
               <h3 className="text-slate-200">Konfirmasi Pembayaran</h3>
             </div>
-            
+
             <div className="space-y-4">
               <div className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -447,11 +446,10 @@ export function PaymentScreen() {
             <button
               onClick={paymentMethod === 'bowar' ? handleBowarPayment : () => setShowPaymentForm(true)}
               disabled={isProcessing}
-              className={`flex-1 py-4 rounded-2xl transition-all font-semibold flex items-center justify-center gap-2 ${
-                paymentMethod === 'bowar'
+              className={`flex-1 py-4 rounded-2xl transition-all font-semibold flex items-center justify-center gap-2 ${paymentMethod === 'bowar'
                   ? 'bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 disabled:from-slate-700 disabled:to-slate-700 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50'
                   : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-slate-700 disabled:to-slate-700 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50'
-              } disabled:cursor-not-allowed text-white disabled:shadow-none`}
+                } disabled:cursor-not-allowed text-white disabled:shadow-none`}
             >
               {isProcessing ? (
                 <>
@@ -510,7 +508,7 @@ export function PaymentScreen() {
                 <label className="text-slate-300 text-sm mb-2 block">
                   Upload Bukti Transfer <span className="text-red-400">*</span>
                 </label>
-                
+
                 {!proofImage ? (
                   <div className="relative">
                     <input

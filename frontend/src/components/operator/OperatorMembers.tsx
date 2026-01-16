@@ -11,6 +11,7 @@ import {
   Search,
   Mail,
   Calendar,
+  Wallet,
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
@@ -40,12 +41,12 @@ export function OperatorMembers() {
   useEffect(() => {
     const loadMembers = async () => {
       if (!operator?.cafeId) return;
-      
+
       try {
         setLoading(true);
         const warnetId = parseInt(operator.cafeId);
         const response = await getWarnetMembers(warnetId);
-        
+
         if (response.data && Array.isArray(response.data)) {
           // Map backend data to RegisteredUser format
           const mappedMembers: RegisteredUser[] = response.data.map((member: any) => ({
@@ -56,7 +57,10 @@ export function OperatorMembers() {
             password: '', // Not needed for display
             bowarWallet: member.bowarWallet || 0,
             avatar: member.avatar,
-            cafeWallets: member.cafeWallets || [],
+            cafeWallets: member.cafeWallets?.map((w: any) => ({
+              ...w,
+              balance: Number(w.balance) || 0
+            })) || [],
           }));
           setMembers(mappedMembers);
         }
@@ -115,8 +119,7 @@ export function OperatorMembers() {
     });
 
     toast.success(
-      `${timeAction === 'add' ? 'Menambahkan' : 'Mengurangi'} ${hoursToModify} jam ${
-        timeAction === 'add' ? 'ke' : 'dari'
+      `${timeAction === 'add' ? 'Menambahkan' : 'Mengurangi'} ${hoursToModify} jam ${timeAction === 'add' ? 'ke' : 'dari'
       } akun ${selectedMember.username}`
     );
 
@@ -274,8 +277,18 @@ export function OperatorMembers() {
 
                           <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-3">
                             <div className="flex items-center gap-2 mb-1">
+                              <Wallet className="w-4 h-4 text-cyan-400" />
+                              <span className="text-xs text-slate-400">Saldo Tunai</span>
+                            </div>
+                            <p className="text-sm text-cyan-300">
+                              Rp {(wallet?.balance || 0).toLocaleString()}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-3">
+                            <div className="flex items-center gap-2 mb-1">
                               <Calendar className="w-4 h-4 text-purple-400" />
-                              <span className="text-xs text-slate-400">Terakhir Diupdate</span>
+                              <span className="text-xs text-slate-400">Terakhir Update</span>
                             </div>
                             <p className="text-sm text-slate-300">
                               {formatDate(lastUpdated)}
@@ -298,11 +311,10 @@ export function OperatorMembers() {
                     <button
                       onClick={() => handleOpenTimeDialog(member, 'deduct')}
                       disabled={remainingMinutes <= 0}
-                      className={`flex-1 py-3 rounded-2xl transition-all flex items-center justify-center gap-2 ${
-                        remainingMinutes > 0
+                      className={`flex-1 py-3 rounded-2xl transition-all flex items-center justify-center gap-2 ${remainingMinutes > 0
                           ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400'
                           : 'bg-slate-800/30 border border-slate-700/50 text-slate-600 cursor-not-allowed'
-                      }`}
+                        }`}
                     >
                       <Minus className="w-4 h-4" />
                       <span className="text-sm">Kurangi Waktu</span>
@@ -392,14 +404,14 @@ export function OperatorMembers() {
                     {formatTime(
                       timeAction === 'add'
                         ? (selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId)
-                            ?.remainingMinutes || 0) +
-                            hoursToModify * 60
+                          ?.remainingMinutes || 0) +
+                        hoursToModify * 60
                         : Math.max(
-                            0,
-                            (selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId)
-                              ?.remainingMinutes || 0) -
-                              hoursToModify * 60
-                          )
+                          0,
+                          (selectedMember.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId)
+                            ?.remainingMinutes || 0) -
+                          hoursToModify * 60
+                        )
                     )}
                   </p>
                 </div>
@@ -416,11 +428,10 @@ export function OperatorMembers() {
             </button>
             <button
               onClick={handleModifyTime}
-              className={`flex-1 py-3 rounded-2xl transition-all ${
-                timeAction === 'add'
+              className={`flex-1 py-3 rounded-2xl transition-all ${timeAction === 'add'
                   ? 'bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 text-white shadow-lg shadow-teal-500/30'
                   : 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white shadow-lg shadow-red-500/30'
-              }`}
+                }`}
             >
               Konfirmasi {timeAction === 'add' ? 'Tambah' : 'Kurang'}
             </button>

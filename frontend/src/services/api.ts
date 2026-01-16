@@ -397,13 +397,11 @@ export const getBowarTransaction = async (transactionId: number) => {
 };
 
 // Top up DompetBowar (via transfer - pending approval)
-export const topupBowar = async (data: {
-  amount: number;
-  description?: string;
-  proofImage: string;
-  senderName: string;
-}) => {
-  const response = await api.post('/bowar-transactions/topup', data);
+export const topupBowar = async (data: any) => {
+  const isFormData = data instanceof FormData;
+  const response = await api.post('/bowar-transactions/topup', data, {
+    headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
+  });
   return response.data;
 };
 
@@ -470,5 +468,73 @@ export const getWarnetStatistics = async (warnetId: number, startDate?: string, 
   return response.data;
 };
 
-export default api;
+// ============================================
+// BOOKING APIs
+// ============================================
 
+// Create booking
+export const createBooking = async (data: FormData | {
+  warnetId: number;
+  pcNumber: number;
+  bookingDate: string;
+  bookingTime: string;
+  duration: number;
+  paymentMethod: string;
+}) => {
+  const config = data instanceof FormData ? {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  } : {};
+
+  const response = await api.post('/bookings', data, config);
+  return response.data;
+};
+
+// Get booking history
+export const getBookings = async (page = 1, limit = 20) => {
+  const response = await api.get('/bookings', {
+    params: { page, limit }
+  });
+  return response.data;
+};
+
+// Cancel booking
+export const cancelBooking = async (bookingId: number) => {
+  const response = await api.post(`/bookings/${bookingId}/cancel`);
+  return response.data;
+};
+
+// ============================================
+// OPERATOR BOOKING APIs
+// ============================================
+
+// Get all bookings for operator warnet management
+export const getOperatorBookings = async (page = 1, limit = 50, status?: string, search?: string) => {
+  const params: any = { page, limit };
+  if (status) params.status = status;
+  if (search) params.search = search;
+  const response = await api.get('/operator/bookings', { params });
+  return response.data;
+};
+
+// Get pending bookings for operator approval
+export const getOperatorPendingBookings = async () => {
+  const response = await api.get('/operator/bookings/pending');
+  return response.data;
+};
+
+// Approve booking payment
+export const approveBookingPayment = async (bookingId: number) => {
+  const response = await api.post(`/operator/bookings/${bookingId}/approve`);
+  return response.data;
+};
+
+// Reject booking payment
+export const rejectBookingPayment = async (bookingId: number) => {
+  const response = await api.post(`/operator/bookings/${bookingId}/reject`);
+  return response.data;
+};
+
+
+export default api;

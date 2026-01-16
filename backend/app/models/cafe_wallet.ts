@@ -18,6 +18,9 @@ export default class CafeWallet extends BaseModel {
   declare remaining_minutes: number
 
   @column()
+  declare balance: number
+
+  @column()
   declare is_active: boolean
 
   @column.dateTime()

@@ -3,6 +3,7 @@ import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Booking from './booking.js'
+import Warnet from './warnet.js'
 
 export default class BowarTransaction extends BaseModel {
   @column({ isPrimary: true })
@@ -22,6 +23,9 @@ export default class BowarTransaction extends BaseModel {
 
   @column()
   declare booking_id: number | null
+
+  @column()
+  declare warnet_id: number | null
 
   @column()
   declare status: 'pending' | 'completed' | 'failed'
@@ -55,6 +59,11 @@ export default class BowarTransaction extends BaseModel {
     foreignKey: 'booking_id',
   })
   declare booking: BelongsTo<typeof Booking> | null
+
+  @belongsTo(() => Warnet, {
+    foreignKey: 'warnet_id',
+  })
+  declare warnet: BelongsTo<typeof Warnet> | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

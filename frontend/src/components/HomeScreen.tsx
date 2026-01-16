@@ -53,13 +53,13 @@ export function HomeScreen() {
 
     // Process payment and add time
     context?.extendWallet(selectedCafeForTime, minutesToAdd);
-    
+
     // Add to booking history
     if (cafe && context && context.user) {
       // Check if user is member at this cafe
-      const isMemberAtCafe = context.user.role === 'member' && 
+      const isMemberAtCafe = context.user.role === 'member' &&
         context.user.cafeWallets?.some((w) => w.cafeId === selectedCafeForTime);
-      
+
       const historyEntry = {
         id: `time-${Date.now()}`,
         userId: context.user.id, // Add userId to track ownership
@@ -76,10 +76,10 @@ export function HomeScreen() {
       };
       context.addBooking(historyEntry);
     }
-    
+
     // Show success step
     setPaymentStep('success');
-    
+
     toast.success(`Pembayaran berhasil! ${hoursToAdd} jam ditambahkan ke wallet Anda`);
 
     // Auto close after 2 seconds
@@ -195,35 +195,9 @@ export function HomeScreen() {
             </div>
           ) : (
             context.cafes.map((cafe) => {
-              // Check if user is member at this cafe
-              // Handle both string and number IDs for compatibility
-              const isMemberCafe = (() => {
-                // Debug logging
-                const userRole = context.user?.role;
-                const hasCafeWallets = context.user?.cafeWallets && context.user.cafeWallets.length > 0;
-                
-                // First check if user is a member role
-                if (userRole !== 'member') {
-                  return false;
-                }
-                
-                // Then check if user has a wallet for this cafe
-                if (!hasCafeWallets) {
-                  return false;
-                }
-                
-                // Check if any wallet matches this cafe ID
-                const matched = context.user?.cafeWallets?.some((w) => {
-                  // Convert both to string for comparison to handle number/string mismatch
-                  const walletCafeId = String(w.cafeId || '');
-                  const currentCafeId = String(cafe.id || '');
-                  const isMatch = walletCafeId === currentCafeId && walletCafeId !== '';
-                  
-                  return isMatch;
-                }) || false;
-                
-                return matched;
-              })();
+              // Strict check: User role is member AND user's home warnet matches this cafe
+              const isMemberCafe = context.user?.role === 'member' &&
+                String(context.user?.warnet?.id || '') === String(cafe.id || '');
 
               return (
                 <div
@@ -240,7 +214,7 @@ export function HomeScreen() {
                     />
                     {/* Gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
-                    
+
                     {/* Member Badge - Pojok Kanan Atas */}
                     {isMemberCafe && (
                       <div className="absolute top-4 right-4 z-10 bg-gradient-to-r from-blue-500/90 to-purple-500/90 backdrop-blur-xl border border-blue-400/50 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg shadow-blue-500/30">
@@ -375,7 +349,7 @@ export function HomeScreen() {
                       e.currentTarget.focus();
                     }}
                     className="w-full bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3 text-slate-200 focus:border-blue-500/50 focus:outline-none transition-colors"
-                    style={{ 
+                    style={{
                       WebkitTapHighlightColor: 'transparent',
                       touchAction: 'manipulation'
                     }}
@@ -420,7 +394,7 @@ export function HomeScreen() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-slate-300 text-sm">Harga per jam</span>
                     <span className="text-slate-200">
-                      Rp {selectedCafeForTime 
+                      Rp {selectedCafeForTime
                         ? context?.cafes.find((c) => c.id === selectedCafeForTime)?.memberPricePerHour.toLocaleString() || '0'
                         : '0'}
                     </span>
@@ -483,22 +457,19 @@ export function HomeScreen() {
                         <button
                           key={method.id}
                           onClick={() => setPaymentMethod(method.id)}
-                          className={`w-full bg-slate-800/50 border rounded-2xl p-4 transition-all flex items-center gap-3 ${
-                            paymentMethod === method.id
-                              ? 'border-blue-500/50 bg-blue-500/10'
-                              : 'border-slate-700/50 hover:border-slate-600'
-                          }`}
+                          className={`w-full bg-slate-800/50 border rounded-2xl p-4 transition-all flex items-center gap-3 ${paymentMethod === method.id
+                            ? 'border-blue-500/50 bg-blue-500/10'
+                            : 'border-slate-700/50 hover:border-slate-600'
+                            }`}
                         >
-                          <div className={`p-2 rounded-xl ${
-                            paymentMethod === method.id
-                              ? 'bg-blue-500/20'
-                              : 'bg-slate-700/50'
-                          }`}>
-                            <Icon className={`w-5 h-5 ${
-                              paymentMethod === method.id
-                                ? 'text-blue-400'
-                                : 'text-slate-400'
-                            }`} />
+                          <div className={`p-2 rounded-xl ${paymentMethod === method.id
+                            ? 'bg-blue-500/20'
+                            : 'bg-slate-700/50'
+                            }`}>
+                            <Icon className={`w-5 h-5 ${paymentMethod === method.id
+                              ? 'text-blue-400'
+                              : 'text-slate-400'
+                              }`} />
                           </div>
                           <span className={
                             paymentMethod === method.id

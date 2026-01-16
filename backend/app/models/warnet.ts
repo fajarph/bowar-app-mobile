@@ -6,6 +6,7 @@ import Pc from './pc.js'
 import Booking from './booking.js'
 import ChatMessage from './chat_message.js'
 import CafeWallet from './cafe_wallet.js'
+import BowarTransaction from './bowar_transaction.js'
 
 export default class Warnet extends BaseModel {
   @column({ isPrimary: true })
@@ -77,6 +78,11 @@ export default class Warnet extends BaseModel {
     foreignKey: 'warnet_id',
   })
   declare cafeWallets: HasMany<typeof CafeWallet>
+
+  @hasMany(() => BowarTransaction, {
+    foreignKey: 'warnet_id',
+  })
+  declare bowarTransactions: HasMany<typeof BowarTransaction>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

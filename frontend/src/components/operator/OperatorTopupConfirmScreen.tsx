@@ -1,20 +1,20 @@
 import { useContext, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppContext } from '../../App';
-import { 
-  ArrowLeft, 
-  CheckCircle, 
-  XCircle, 
-  User, 
-  Mail, 
-  Wallet, 
-  Clock, 
+import {
+  ArrowLeft,
+  CheckCircle,
+  XCircle,
+  User,
+  Mail,
+  Wallet,
+  Clock,
   Image as ImageIcon,
   AlertCircle,
   FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getBowarTransactions, approveTopup, rejectTopup } from '../../services/api';
+import { getBowarTransaction, approveTopup, rejectTopup } from '../../services/api';
 
 interface PendingTopup {
   id: number;
@@ -35,13 +35,14 @@ export function OperatorTopupConfirmScreen() {
   const { topupId } = useParams<{ topupId: string }>();
   const context = useContext(AppContext);
   const operator = context?.operator;
-  
+
   const [topup, setTopup] = useState<PendingTopup | null>(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [rejectionNote, setRejectionNote] = useState('');
   const [showRejectionNote, setShowRejectionNote] = useState(false);
   const [proofImageError, setProofImageError] = useState(false);
+  const [imageModal, setImageModal] = useState<string | null>(null);
 
   useEffect(() => {
     if (!operator) {
@@ -59,25 +60,15 @@ export function OperatorTopupConfirmScreen() {
       try {
         setLoading(true);
 
-        const response = await getBowarTransactions(1, 50, 'pending', 'topup');
+        const response = await getBowarTransaction(Number(topupId));
 
-        const topups: PendingTopup[] =
-          Array.isArray(response?.data) ? response.data :
-          Array.isArray(response?.data?.data) ? response.data.data :
-          Array.isArray(response?.data?.transactions) ? response.data.transactions :
-          [];
-
-        const foundTopup = topups.find(
-          t => t.id === Number(topupId)
-        );
-
-        if (!foundTopup) {
-          toast.error('Top up tidak ditemukan atau sudah diproses');
+        if (!response.data) {
+          toast.error('Gagal mengambil data top up');
           navigate('/operator/topups');
           return;
         }
 
-        setTopup(foundTopup);
+        setTopup(response.data);
       } catch (error: any) {
         console.error('Load topup error:', error);
 
@@ -112,7 +103,7 @@ export function OperatorTopupConfirmScreen() {
     try {
       setIsProcessing(true);
       const response = await approveTopup(topup.id);
-      
+
       const newBalance = response.data?.newBalance;
       if (newBalance !== undefined) {
         toast.success(
@@ -121,15 +112,15 @@ export function OperatorTopupConfirmScreen() {
       } else {
         toast.success(response.message || 'Top up berhasil disetujui');
       }
-      
+
       // Navigate back to topups list
       navigate('/operator/topups');
     } catch (error: unknown) {
       console.error('Approve error:', error);
-      const errorMessage = 
-        (error && typeof error === 'object' && 'response' in error && 
-         error.response && typeof error.response === 'object' && 'data' in error.response &&
-         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
+      const errorMessage =
+        (error && typeof error === 'object' && 'response' in error &&
+          error.response && typeof error.response === 'object' && 'data' in error.response &&
+          error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
           ? String(error.response.data.message)
           : 'Gagal menyetujui top up';
       toast.error(errorMessage);
@@ -159,15 +150,15 @@ export function OperatorTopupConfirmScreen() {
       setIsProcessing(true);
       const response = await rejectTopup(topup.id, rejectionNote.trim() || undefined);
       toast.success(response.message || 'Top up berhasil ditolak');
-      
+
       // Navigate back to topups list
       navigate('/operator/topups');
     } catch (error: unknown) {
       console.error('Reject error:', error);
-      const errorMessage = 
-        (error && typeof error === 'object' && 'response' in error && 
-         error.response && typeof error.response === 'object' && 'data' in error.response &&
-         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
+      const errorMessage =
+        (error && typeof error === 'object' && 'response' in error &&
+          error.response && typeof error.response === 'object' && 'data' in error.response &&
+          error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data)
           ? String(error.response.data.message)
           : 'Gagal menolak top up';
       toast.error(errorMessage);
@@ -318,7 +309,7 @@ export function OperatorTopupConfirmScreen() {
                   alt="Bukti transfer"
                   className="w-full rounded-2xl border border-slate-800 cursor-pointer hover:opacity-90 transition-opacity"
                   onError={() => setProofImageError(true)}
-                  onClick={() => window.open(topup.proofImage, '_blank')}
+                  onClick={() => setImageModal(topup.proofImage || null)}
                 />
               )}
             </div>
@@ -342,14 +333,14 @@ export function OperatorTopupConfirmScreen() {
             <div className="flex items-center justify-between">
               <span className="text-slate-400 text-sm">Tanggal Permintaan</span>
               <span className="text-slate-200 text-sm">
-                {topup.createdAt 
+                {topup.createdAt
                   ? new Date(topup.createdAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
                   : '-'}
               </span>
             </div>
@@ -426,6 +417,23 @@ export function OperatorTopupConfirmScreen() {
           )}
         </div>
       </div>
+      {/* Modal Components */}
+      {imageModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setImageModal(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img src={imageModal} alt="Top Up Proof Fullscreen" className="w-full h-full object-contain rounded-2xl" />
+            <button
+              onClick={() => setImageModal(null)}
+              className="absolute top-4 right-4 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

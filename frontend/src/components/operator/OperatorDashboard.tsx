@@ -36,6 +36,7 @@ export function OperatorDashboard() {
     activeBookings: number;
     totalMembers: number;
     pendingTopups: number;
+    pendingBookings: number;
     transactions: any[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,12 +53,12 @@ export function OperatorDashboard() {
   useEffect(() => {
     const loadStatistics = async () => {
       if (!operator?.cafeId) return;
-      
+
       try {
         setLoading(true);
         const warnetId = parseInt(operator.cafeId);
         const response = await getWarnetStatistics(warnetId);
-        
+
         if (response.data) {
           setStatistics({
             todayRevenue: response.data.todayRevenue || 0,
@@ -65,6 +66,7 @@ export function OperatorDashboard() {
             activeBookings: response.data.activeBookings || 0,
             totalMembers: response.data.totalMembers || 0,
             pendingTopups: response.data.pendingTopups || 0,
+            pendingBookings: response.data.pendingBookings || 0,
             transactions: response.data.transactions || [],
           });
         }
@@ -101,7 +103,7 @@ export function OperatorDashboard() {
     const utilizationRate = ((occupiedPCs / totalPCs) * 100).toFixed(1);
 
     // Pending actions
-    const pendingPayments = cafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length;
+    const pendingPayments = statistics?.pendingBookings ?? cafeBookings.filter((b) => b.paymentStatus === 'pending' && b.status !== 'cancelled').length;
     const unreadMessages = Object.values(context?.chatMessages || {}).flat().filter(
       (m: ChatMessage) => m.sender === 'user'
     ).length % 5; // Mock unread count
@@ -311,22 +313,20 @@ export function OperatorDashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs ${
-                          transaction.type === 'topup'
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                            : 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        }`}
+                        className={`px-2 py-1 rounded-full text-xs ${transaction.type === 'topup'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                          }`}
                       >
                         {transaction.type === 'topup' ? 'Top Up' : 'Pembayaran'}
                       </span>
                       <span
-                        className={`px-2 py-1 rounded-full text-xs ${
-                          transaction.status === 'completed' || transaction.status === 'paid'
-                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                            : transaction.status === 'pending'
+                        className={`px-2 py-1 rounded-full text-xs ${transaction.status === 'completed' || transaction.status === 'paid'
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                          : transaction.status === 'pending'
                             ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                             : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                        }`}
+                          }`}
                       >
                         {transaction.status === 'paid' ? 'Lunas' : transaction.status === 'completed' ? 'Selesai' : transaction.status === 'pending' ? 'Pending' : 'Gagal'}
                       </span>
@@ -389,7 +389,7 @@ export function OperatorDashboard() {
               {stats.pendingPayments > 0 && (
                 <div className="mt-2 bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-1.5 inline-block">
                   <span className="text-red-400 text-xs">
-                    {stats.pendingPayments} pembayaran tertunda
+                    {stats.pendingPayments} pending
                   </span>
                 </div>
               )}

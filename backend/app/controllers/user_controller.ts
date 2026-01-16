@@ -24,38 +24,39 @@ export default class UserController {
         await user.load('warnet')
       }
 
-      // Load cafe wallets if member
+      // Load cafe wallets for all users (not just members)
       let cafeWallets: Array<{
         cafeId: string
         cafeName: string
+        balance: number
         remainingMinutes: number
         isActive: boolean
         lastUpdated: string
       }> = []
-      if (user.role === 'member') {
-        const wallets = await CafeWallet.query()
-          .where('user_id', user.id)
-          .preload('warnet')
 
-        cafeWallets = wallets.map((wallet) => ({
-          cafeId: wallet.warnet_id.toString(),
-          cafeName: wallet.warnet.name,
-          remainingMinutes: wallet.remaining_minutes,
-          isActive: wallet.is_active,
-          lastUpdated: wallet.last_updated.toISO() || new Date().toISOString(),
-        }))
-        
-        // If member has warnet_id but no wallet yet, create a placeholder wallet entry
-        // This ensures badge "Member" appears even if user hasn't made any payments yet
-        if (user.warnet_id && cafeWallets.length === 0 && user.warnet) {
-          cafeWallets.push({
-            cafeId: user.warnet_id.toString(),
-            cafeName: user.warnet.name,
-            remainingMinutes: 0,
-            isActive: false,
-            lastUpdated: new Date().toISOString(),
-          })
-        }
+      const wallets = await CafeWallet.query()
+        .where('user_id', user.id)
+        .preload('warnet')
+
+      cafeWallets = wallets.map((wallet) => ({
+        cafeId: wallet.warnet_id.toString(),
+        cafeName: wallet.warnet?.name || 'Unknown',
+        balance: Number(wallet.balance) || 0,
+        remainingMinutes: wallet.remaining_minutes || 0,
+        isActive: wallet.is_active,
+        lastUpdated: wallet.last_updated?.toISO() || new Date().toISOString(),
+      }))
+
+      // If user has a warnet_id but no wallet entry yet, ensure they have a balance entry
+      if (user.warnet_id && !cafeWallets.find(w => w.cafeId === user.warnet_id?.toString()) && user.warnet) {
+        cafeWallets.push({
+          cafeId: user.warnet_id.toString(),
+          cafeName: user.warnet.name,
+          balance: 0,
+          remainingMinutes: 0,
+          isActive: false,
+          lastUpdated: new Date().toISOString(),
+        })
       }
 
       return response.ok({
@@ -69,10 +70,10 @@ export default class UserController {
           bowarWallet: user.bowar_wallet || 0,
           warnet: user.warnet
             ? {
-                id: user.warnet.id,
-                name: user.warnet.name,
-                address: user.warnet.address,
-              }
+              id: user.warnet.id,
+              name: user.warnet.name,
+              address: user.warnet.address,
+            }
             : null,
           cafeWallets: cafeWallets,
         },
@@ -140,6 +141,7 @@ export default class UserController {
           role: user.role,
           avatar: user.avatar,
           bowarWallet: user.bowar_wallet || 0,
+          cafeWallets: await CafeWallet.query().where('user_id', user.id),
         },
       })
     } catch (error: any) {
@@ -189,13 +191,6 @@ export default class UserController {
       await auth.check()
       const user = auth.user!
 
-      if (user.role !== 'member') {
-        return response.ok({
-          message: 'User biasa tidak memiliki wallet',
-          data: [],
-        })
-      }
-
       const wallets = await CafeWallet.query()
         .where('user_id', user.id)
         .preload('warnet')
@@ -205,10 +200,11 @@ export default class UserController {
         data: wallets.map((wallet) => ({
           id: wallet.id,
           cafeId: wallet.warnet_id.toString(),
-          cafeName: wallet.warnet.name,
+          cafeName: wallet.warnet?.name || 'Unknown',
+          balance: Number(wallet.balance) || 0,
           remainingMinutes: wallet.remaining_minutes,
           isActive: wallet.is_active,
-          lastUpdated: wallet.last_updated.toISO(),
+          lastUpdated: wallet.last_updated?.toISO(),
         })),
       })
     } catch {
@@ -256,6 +252,7 @@ export default class UserController {
         // Get wallets for this member account
         const wallets = await CafeWallet.query()
           .where('user_id', memberAccount.id)
+          .where('warnet_id', memberAccount.warnet_id!)
           .preload('warnet')
 
         // If member has warnet_id but no wallet yet, create a placeholder

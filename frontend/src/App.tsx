@@ -17,6 +17,7 @@ import { EditProfileScreen } from './components/EditProfileScreen';
 import { MapScreen } from './components/MapScreen';
 import { RulesScreen } from './components/RulesScreen';
 import { DompetBowarScreen } from './components/DompetBowarScreen';
+import { BookingDetailScreen } from './components/BookingDetailScreen';
 import { Toaster } from './components/ui/sonner';
 import { NeonLogin } from './components/NeonLogin';
 // Operator imports
@@ -36,7 +37,12 @@ export interface User {
   role: 'regular' | 'member' | 'operator';
   cafeWallets?: CafeWallet[];
   avatar?: string;
-  bowarWallet?: number; // Saldo DompetBowar dalam Rupiah
+  bowarWallet?: number;
+  warnet?: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
 }
 
 export interface RegisteredUser extends User {
@@ -46,6 +52,7 @@ export interface RegisteredUser extends User {
 export interface CafeWallet {
   cafeId: string;
   cafeName: string;
+  balance: number;
   remainingMinutes: number;
   isActive: boolean; // true when logged in at cafe
   lastUpdated: number;
@@ -60,6 +67,8 @@ export interface Cafe {
   memberPricePerHour: number;
   totalPCs: number;
   rules?: string[]; // Peraturan khusus untuk setiap warnet
+  bankAccountNumber?: string; // Nomor rekening bank warnet
+  bankAccountName?: string; // Nama pemilik rekening bank warnet
 }
 
 export interface PCStatus {
@@ -87,6 +96,10 @@ export interface Booking {
   isSessionActive?: boolean;
   sessionStartTime?: number; // Timestamp when session actually started
   isMemberBooking?: boolean; // Track if user was member at this cafe when booking
+  totalPrice?: number;
+  paymentProofImage?: string | null;
+  paymentAccountName?: string | null;
+  paymentNotes?: string | null;
 }
 
 export interface ChatMessage {
@@ -138,6 +151,7 @@ function App() {
           avatar: userData.avatar,
           bowarWallet: userData.bowarWallet || 0,
           cafeWallets: mappedCafeWallets,
+          warnet: userData.warnet,
         };
       } catch (e) {
         console.error('Failed to parse stored user:', e);
@@ -413,6 +427,7 @@ function App() {
               ? profileData.cafeWallets.map((wallet: any) => ({
                 cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
                 cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+                balance: wallet.balance || 0,
                 remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
                 isActive: wallet.isActive || wallet.is_active || false,
                 lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
@@ -426,6 +441,7 @@ function App() {
                 mappedCafeWallets = [{
                   cafeId: String(profileData.warnet.id),
                   cafeName: profileData.warnet.name || '',
+                  balance: 0,
                   remainingMinutes: 0,
                   isActive: false,
                   lastUpdated: Date.now(),
@@ -453,6 +469,7 @@ function App() {
               avatar: profileData.avatar,
               bowarWallet: profileData.bowarWallet || 0,
               cafeWallets: mappedCafeWallets,
+              warnet: profileData.warnet,
             };
             setUser(updatedUser);
             // Update localStorage with latest data
@@ -816,6 +833,10 @@ function App() {
             <Route
               path="/booking-history"
               element={user ? <BookingHistoryScreen /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/booking-detail/:bookingId"
+              element={user ? <BookingDetailScreen /> : <Navigate to="/login" />}
             />
             <Route
               path="/profile"

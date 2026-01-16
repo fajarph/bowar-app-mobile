@@ -54,6 +54,21 @@ export default class Booking extends BaseModel {
   @column.dateTime()
   declare can_cancel_until: DateTime | null
 
+  @column()
+  declare payment_proof_image: string | null
+
+  @column()
+  declare payment_account_name: string | null
+
+  @column()
+  declare payment_notes: string | null
+
+  @column()
+  declare approved_by: number | null
+
+  @column.dateTime()
+  declare approved_at: DateTime | null
+
   @belongsTo(() => User, {
     foreignKey: 'user_id',
   })
@@ -88,13 +103,13 @@ export default class Booking extends BaseModel {
    */
   getRemainingMinutes(): number | null {
     if (!this.is_session_active || !this.session_start_time) return null
-    
+
     const now = DateTime.now()
     const start = this.session_start_time
     const elapsed = now.diff(start, 'minutes').minutes
     const totalMinutes = this.duration * 60
     const remaining = Math.max(0, totalMinutes - elapsed)
-    
+
     return Math.floor(remaining)
   }
 }

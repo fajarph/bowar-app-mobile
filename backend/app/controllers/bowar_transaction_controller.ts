@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import BowarTransaction from '#models/bowar_transaction'
 import User from '#models/user'
 import Booking from '#models/booking'
+import CafeWallet from '#models/cafe_wallet'
 
 export default class BowarTransactionController {
   /**
@@ -11,107 +12,117 @@ export default class BowarTransactionController {
    * For operators: returns all pending topups if status=pending query param is provided
    */
   async index({ auth, request, response }: HttpContext) {
-  try {
-    /* ================= AUTH ================= */
-    await auth.check()
-    const user = auth.user!
+    try {
+      /* ================= AUTH ================= */
+      await auth.check()
+      const user = auth.user!
 
-    /* ================= QUERY PARAMS ================= */
-    const page = request.input('page', 1)
-    const limit = request.input('limit', 20)
-    const status = request.input('status')
-    const type = request.input('type')
+      /* ================= QUERY PARAMS ================= */
+      const page = request.input('page', 1)
+      const limit = request.input('limit', 20)
+      const status = request.input('status')
+      const type = request.input('type')
 
-    /* ================= BASE QUERY ================= */
-    let query = BowarTransaction
-      .query()
-      .orderBy('created_at', 'desc')
+      /* ================= BASE QUERY ================= */
+      let query = BowarTransaction
+        .query()
+        .orderBy('created_at', 'desc')
 
-    /* ================= ROLE LOGIC ================= */
-    if (user.role === 'operator' && type === 'topup') {
-      query.where('type', 'topup').preload('user')
+      /* ================= ROLE LOGIC ================= */
+      if (user.role === 'operator' && type === 'topup') {
+        query.where('type', 'topup').preload('user').preload('warnet')
 
-      if (status) {
-        query.where('status', status)
+        if (status) {
+          query.where('status', status)
+        }
+      } else {
+        query.where('user_id', user.id)
+
+        if (status) query.where('status', status)
+        if (type) query.where('type', type)
       }
-    } else {
-      query.where('user_id', user.id)
 
-      if (status) query.where('status', status)
-      if (type) query.where('type', type)
-    }
+      /* ================= PAGINATION ================= */
+      const transactions = await query.paginate(page, limit)
 
-    /* ================= PAGINATION ================= */
-    const transactions = await query.paginate(page, limit)
+      /* ================= SERIALIZE ================= */
+      const data = transactions.serialize().data.map((tx: any) => ({
+        id: tx.id,
+        type: tx.type,
+        amount: Number(tx.amount),
+        description: tx.description,
+        status: tx.status,
+        createdAt: tx.createdAt || tx.created_at,
+        proofImage: (tx.proof_image || tx.proofImage)?.startsWith('http')
+          ? (tx.proof_image || tx.proofImage)
+          : ((tx.proof_image || tx.proofImage) ? `${request.protocol()}://${request.host()}${tx.proof_image || tx.proofImage}` : null),
+        senderName: tx.sender_name || tx.senderName,
+        warnetId: tx.warnet_id,
+        warnetName: tx.warnet?.name,
 
-    /* ================= SERIALIZE ================= */
-    const data = transactions.serialize().data.map((tx: any) => ({
-      id: tx.id,
-      type: tx.type,
-      amount: Number(tx.amount),
-      description: tx.description,
-      status: tx.status,
-      createdAt: tx.created_at,
-      proofImage: tx.proof_image,
-      senderName: tx.sender_name,
+        ...(user.role === 'operator' && type === 'topup' && {
+          userId: tx.user?.id,
+          username: tx.user?.username ?? 'Unknown',
+          email: tx.user?.email ?? 'Unknown',
+          userRole: tx.user?.role ?? 'Unknown',
+        }),
+      }))
 
-      ...(user.role === 'operator' && type === 'topup' && {
-        userId: tx.user?.id,
-        username: tx.user?.username ?? 'Unknown',
-        email: tx.user?.email ?? 'Unknown',
-        userRole: tx.user?.role ?? 'Unknown',
-      }),
-    }))
+      /* ================= RESPONSE ================= */
+      return response.ok({
+        message: 'Riwayat transaksi berhasil diambil',
+        data,
+        meta: transactions.serialize().meta,
+      })
 
-    /* ================= RESPONSE ================= */
-    return response.ok({
-      message: 'Riwayat transaksi berhasil diambil',
-      data,
-      meta: transactions.serialize().meta,
-    })
+    } catch (error: any) {
+      console.error('❌ BowarTransaction index error:', error)
 
-  } catch (error: any) {
-    console.error('❌ BowarTransaction index error:', error)
+      /* ================= AUTH ERROR ================= */
+      if (error.code === 'E_UNAUTHORIZED_ACCESS') {
+        return response.unauthorized({
+          message: 'Silakan login terlebih dahulu',
+        })
+      }
 
-    /* ================= AUTH ERROR ================= */
-    if (error.code === 'E_UNAUTHORIZED_ACCESS') {
-      return response.unauthorized({
-        message: 'Silakan login terlebih dahulu',
+      /* ================= SERVER ERROR ================= */
+      return response.internalServerError({
+        message: 'Terjadi kesalahan pada server',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       })
     }
-
-    /* ================= SERVER ERROR ================= */
-    return response.internalServerError({
-      message: 'Terjadi kesalahan pada server',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-    })
   }
-}
 
 
   /**
    * GET /bowar-transactions/:id - Get transaction detail
    */
-  async show({ auth, params, response }: HttpContext) {
+  async show({ auth, params, request, response }: HttpContext) {
     try {
       await auth.check()
       const user = auth.user!
 
-      const transaction = await BowarTransaction.find(params.id)
+      const transaction = await BowarTransaction.query()
+        .where('id', params.id)
+        .preload('user')
+        .preload('booking')
+        .first()
+
       if (!transaction) {
         return response.notFound({
           message: 'Transaksi tidak ditemukan',
         })
       }
 
-      // Verify transaction belongs to user
-      if (transaction.user_id !== user.id) {
+      // Verify transaction belongs to user OR user is operator and it's a topup
+      const isOwner = transaction.user_id === user.id
+      const isOperatorViewingTopup = user.role === 'operator' && transaction.type === 'topup'
+
+      if (!isOwner && !isOperatorViewingTopup) {
         return response.forbidden({
           message: 'Anda tidak memiliki akses ke transaksi ini',
         })
       }
-
-      await transaction.load('booking')
 
       return response.ok({
         message: 'Detail transaksi berhasil diambil',
@@ -121,10 +132,20 @@ export default class BowarTransactionController {
           amount: parseFloat(transaction.amount.toString()),
           description: transaction.description,
           status: transaction.status,
-          proofImage: transaction.proof_image,
+          proofImage: transaction.proof_image?.startsWith('http')
+            ? transaction.proof_image
+            : (transaction.proof_image ? `${request.protocol()}://${request.host()}${transaction.proof_image}` : null),
           senderName: transaction.sender_name,
           bookingId: transaction.booking_id,
+          warnetId: transaction.warnet_id,
+          warnetName: transaction.warnet?.name,
           createdAt: transaction.createdAt.toISO(),
+          // Include user info for operators
+          ...(user.role === 'operator' && {
+            userId: transaction.user?.id,
+            username: transaction.user?.username,
+            email: transaction.user?.email,
+          })
         },
       })
     } catch {
@@ -143,12 +164,36 @@ export default class BowarTransactionController {
       await auth.check()
       const user = auth.user!
 
-      const { amount, description, proofImage, senderName } = request.only([
+      const { amount, description, senderName, warnetId } = request.only([
         'amount',
         'description',
-        'proofImage',
         'senderName',
+        'warnetId',
       ])
+
+      const proofImageFile = request.file('proofImage', {
+        size: '5mb',
+        extnames: ['jpg', 'png', 'jpeg', 'webp'],
+      })
+
+      // If no file but has proofImage in body, it might be base64 (legacy)
+      let finalProofImage = request.input('proofImage')
+
+      if (proofImageFile) {
+        if (!proofImageFile.isValid) {
+          return response.badRequest({
+            message: 'Bukti transfer tidak valid atau terlalu besar (maks 5MB)',
+            errors: proofImageFile.errors,
+          })
+        }
+
+        const fileName = `${new Date().getTime()}.${proofImageFile.extname}`
+        await proofImageFile.move('public/uploads/topups', {
+          name: fileName,
+          overwrite: true,
+        })
+        finalProofImage = `/uploads/topups/${fileName}`
+      }
 
       if (!amount || amount <= 0) {
         return response.badRequest({
@@ -156,16 +201,9 @@ export default class BowarTransactionController {
         })
       }
 
-      if (!proofImage || !senderName) {
+      if (!finalProofImage || !senderName || !warnetId) {
         return response.badRequest({
-          message: 'Bukti transfer dan nama pengirim wajib diisi',
-        })
-      }
-
-      // Validate proofImage is base64 string
-      if (typeof proofImage !== 'string' || proofImage.length === 0) {
-        return response.badRequest({
-          message: 'Bukti transfer tidak valid',
+          message: 'Bukti transfer, nama pengirim, dan warnet wajib diisi',
         })
       }
 
@@ -174,10 +212,11 @@ export default class BowarTransactionController {
         user_id: user.id,
         type: 'topup',
         amount: amount,
-        description: description || `Top Up DompetBowar sebesar Rp ${amount.toLocaleString()}`,
+        description: description || `Top Up DompetBowar sebesar Rp ${Number(amount).toLocaleString()}`,
         status: 'pending',
-        proof_image: proofImage,
+        proof_image: finalProofImage,
         sender_name: senderName,
+        warnet_id: warnetId,
       })
 
       return response.created({
@@ -239,16 +278,21 @@ export default class BowarTransactionController {
         })
       }
 
-      // Check user balance
-      if (!user.bowar_wallet || user.bowar_wallet < amount) {
+      // Check per-warnet balance
+      const cafeWallet = await CafeWallet.query()
+        .where('user_id', user.id)
+        .where('warnet_id', booking.warnet_id)
+        .first()
+
+      if (!cafeWallet || cafeWallet.balance < amount) {
         return response.badRequest({
-          message: 'Saldo DompetBowar tidak cukup',
+          message: 'Saldo Warnet ini tidak cukup. Silakan top up khusus di warnet ini.',
         })
       }
 
-      // Deduct from user balance
-      user.bowar_wallet -= amount
-      await user.save()
+      // Deduct from cafe wallet balance
+      cafeWallet.balance -= amount
+      await cafeWallet.save()
 
       // Create payment transaction
       const transaction = await BowarTransaction.create({
@@ -257,6 +301,7 @@ export default class BowarTransactionController {
         amount: -amount, // Negative for payment
         description: description || `Pembayaran booking #${bookingId}`,
         booking_id: bookingId,
+        warnet_id: booking.warnet_id,
         status: 'completed',
       })
 
@@ -301,9 +346,29 @@ export default class BowarTransactionController {
         })
       }
 
-      // Add to user balance
-      user.bowar_wallet = (user.bowar_wallet || 0) + amount
-      await user.save()
+      const booking = bookingId ? await Booking.find(bookingId) : null
+
+      // Add to cafe wallet balance
+      let cafeWallet = await CafeWallet.query()
+        .where('user_id', user.id)
+        .where('warnet_id', booking?.warnet_id || 0)
+        .first()
+
+      if (!cafeWallet && booking) {
+        cafeWallet = await CafeWallet.create({
+          user_id: user.id,
+          warnet_id: booking.warnet_id,
+          remaining_minutes: 0,
+          balance: 0,
+          is_active: false,
+          last_updated: DateTime.now(),
+        })
+      }
+
+      if (cafeWallet) {
+        cafeWallet.balance = (Number(cafeWallet.balance) || 0) + amount
+        await cafeWallet.save()
+      }
 
       // Create refund transaction
       const transaction = await BowarTransaction.create({
@@ -312,6 +377,7 @@ export default class BowarTransactionController {
         amount: amount,
         description: description || `Refund untuk booking #${bookingId || 'N/A'}`,
         booking_id: bookingId || null,
+        warnet_id: booking?.warnet_id || null,
         status: 'completed',
       })
 
@@ -378,25 +444,30 @@ export default class BowarTransactionController {
         })
       }
 
-      // Get current balance (ensure it's a number)
-      const currentBalance = Number(transactionOwner.bowar_wallet) || 0
-      const topupAmount = Number(transaction.amount) || 0
-      
-      // Calculate new balance
-      const newBalance = currentBalance + topupAmount
+      // Update CafeWallet balance instead of global wallet
+      let cafeWallet = await CafeWallet.query()
+        .where('user_id', transactionOwner.id)
+        .where('warnet_id', transaction.warnet_id!)
+        .first()
 
-      // Update user balance - IMPORTANT: This adds the topup amount to user's wallet
-      transactionOwner.bowar_wallet = newBalance
-      await transactionOwner.save()
-
-      // Verify the balance was updated
-      await transactionOwner.refresh()
-      if (Number(transactionOwner.bowar_wallet) !== newBalance) {
-        console.error('❌ Balance update failed! Expected:', newBalance, 'Got:', transactionOwner.bowar_wallet)
-        return response.internalServerError({
-          message: 'Gagal mengupdate saldo user',
+      if (!cafeWallet) {
+        cafeWallet = await CafeWallet.create({
+          user_id: transactionOwner.id,
+          warnet_id: transaction.warnet_id!,
+          remaining_minutes: 0,
+          balance: 0,
+          is_active: false,
+          last_updated: DateTime.now(),
         })
       }
+
+      // Calculate new balance
+      const currentBalance = Number(cafeWallet.balance) || 0
+      const topupAmount = Number(transaction.amount) || 0
+      const newBalance = currentBalance + topupAmount
+
+      cafeWallet.balance = newBalance
+      await cafeWallet.save()
 
       // Update transaction status and save approval info
       transaction.status = 'completed'
@@ -404,7 +475,7 @@ export default class BowarTransactionController {
       transaction.approved_at = DateTime.now()
       await transaction.save()
 
-      console.log(`✅ Topup approved: User ${transactionOwner.id} balance updated from ${currentBalance} to ${newBalance} (added ${topupAmount})`)
+      console.log(`✅ Topup approved: User ${transactionOwner.id} CafeWallet (Warnet ${transaction.warnet_id}) balance updated from ${currentBalance} to ${newBalance}`)
 
       return response.ok({
         message: 'Top up berhasil disetujui',
@@ -413,7 +484,8 @@ export default class BowarTransactionController {
           type: transaction.type,
           amount: parseFloat(transaction.amount.toString()),
           status: transaction.status,
-          newBalance: transactionOwner.bowar_wallet,
+          newBalance: cafeWallet.balance,
+          warnetId: transaction.warnet_id,
         },
       })
     } catch (error: any) {
