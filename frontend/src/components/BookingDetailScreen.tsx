@@ -31,6 +31,8 @@ interface ApiBooking {
     address: string;
     description?: string;
     phone?: string;
+    bankAccountNumber?: string;
+    bankAccountName?: string;
   };
 }
 
@@ -257,6 +259,23 @@ export function BookingDetailScreen() {
               <p className="text-slate-400 text-sm mb-1">PC Number</p>
               <p className="text-cyan-400 text-2xl font-bold">#{booking.pcNumber}</p>
             </div>
+
+            {booking.paymentStatus === 'pending' && booking.warnet?.bankAccountNumber && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 space-y-2">
+                <p className="text-blue-400 text-xs flex items-center gap-1.5 font-medium">
+                  <Monitor className="w-3.5 h-3.5" />
+                  REKENING PEMBAYARAN:
+                </p>
+                <div className="bg-slate-900/50 rounded-xl p-3 border border-blue-500/20">
+                  <p className="text-slate-400 text-xs mb-1">Transfer BCA:</p>
+                  <p className="text-slate-100 font-mono text-lg font-bold">{booking.warnet.bankAccountNumber}</p>
+                  <p className="text-slate-300 text-sm">a/n {booking.warnet.bankAccountName || booking.warnet.name}</p>
+                </div>
+                <p className="text-slate-400 text-[10px] italic">
+                  Silakan transfer sesuai total tagihan dan tunggu konfirmasi operator.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

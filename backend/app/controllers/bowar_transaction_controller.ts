@@ -30,7 +30,11 @@ export default class BowarTransactionController {
 
       /* ================= ROLE LOGIC ================= */
       if (user.role === 'operator' && type === 'topup') {
-        query.where('type', 'topup').preload('user').preload('warnet')
+        // Operators can only see transactions for their own warnet
+        query.where('type', 'topup')
+          .where('warnet_id', user.warnet_id!)
+          .preload('user')
+          .preload('warnet')
 
         if (status) {
           query.where('status', status)
@@ -424,6 +428,13 @@ export default class BowarTransactionController {
         })
       }
 
+      // Security check: Operator can only approve transactions for their own warnet
+      if (user.warnet_id !== transaction.warnet_id) {
+        return response.forbidden({
+          message: 'Anda tidak memiliki akses untuk menyetujui transaksi warnet ini',
+        })
+      }
+
       if (transaction.status !== 'pending') {
         return response.badRequest({
           message: 'Transaksi ini sudah diproses',
@@ -515,6 +526,13 @@ export default class BowarTransactionController {
       if (!transaction) {
         return response.notFound({
           message: 'Transaksi tidak ditemukan',
+        })
+      }
+
+      // Security check: Operator can only reject transactions for their own warnet
+      if (user.warnet_id !== transaction.warnet_id) {
+        return response.forbidden({
+          message: 'Anda tidak memiliki akses untuk menolak transaksi warnet ini',
         })
       }
 

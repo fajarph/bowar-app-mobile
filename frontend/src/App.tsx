@@ -353,6 +353,8 @@ function App() {
             regularPricePerHour: number;
             memberPricePerHour: number;
             totalPCs: number;
+            bankAccountNumber?: string | null;
+            bankAccountName?: string | null;
           }
 
           const mappedCafes: Cafe[] = warnetsData.map((warnet: WarnetResponse) => ({
@@ -363,6 +365,8 @@ function App() {
             regularPricePerHour: warnet.regularPricePerHour || 0,
             memberPricePerHour: warnet.memberPricePerHour || 0,
             totalPCs: warnet.totalPCs || 0,
+            bankAccountNumber: warnet.bankAccountNumber || undefined,
+            bankAccountName: warnet.bankAccountName || undefined,
             rules: [], // Rules will be loaded when viewing details
           }));
           setCafes(mappedCafes);

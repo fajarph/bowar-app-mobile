@@ -1,7 +1,7 @@
 import { useContext, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
-import { ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Upload, X } from 'lucide-react';
+import { ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Upload, X, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBowarTransactions, topupBowar, getUserProfile, getWarnets } from '../services/api';
 
@@ -87,8 +87,8 @@ export function DompetBowarScreen() {
               const newBalance = profileData.bowarWallet || profileData.bowar_wallet || 0;
 
               // Only update if balance actually changed (prevent infinite loop)
-              if (context.user.bowarWallet !== newBalance) {
-                context.setUser({
+              if (context.user.bowarWallet !== newBalance || context.user.cafeWallets?.length !== mappedCafeWallets?.length) {
+                const refreshedUser = {
                   id: String(profileData.id),
                   username: profileData.username,
                   email: profileData.email,
@@ -97,7 +97,9 @@ export function DompetBowarScreen() {
                   bowarWallet: newBalance,
                   cafeWallets: mappedCafeWallets,
                   warnet: profileData.warnet,
-                });
+                };
+                context.setUser(refreshedUser);
+                localStorage.setItem('auth_user', JSON.stringify(refreshedUser));
               }
             }
           } catch (profileError) {
@@ -259,7 +261,7 @@ export function DompetBowarScreen() {
                 }))
                 : undefined;
 
-              context.setUser({
+              const updatedUser = {
                 id: String(profileData.id),
                 username: profileData.username,
                 email: profileData.email,
@@ -268,7 +270,9 @@ export function DompetBowarScreen() {
                 bowarWallet: profileData.bowarWallet || profileData.bowar_wallet || 0,
                 cafeWallets: mappedCafeWallets,
                 warnet: profileData.warnet,
-              });
+              };
+              context.setUser(updatedUser);
+              localStorage.setItem('auth_user', JSON.stringify(updatedUser));
             }
           } catch (profileError) {
             console.error('Failed to reload profile:', profileError);
@@ -501,6 +505,28 @@ export function DompetBowarScreen() {
                   ))}
                 </select>
                 <p className="text-slate-500 text-xs mt-2">Saldo hanya dapat digunakan di warnet yang dipilih.</p>
+
+                {selectedWarnetId && (
+                  <div className="mt-4 bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4">
+                    <p className="text-blue-400 text-xs mb-2 flex items-center gap-1.5 font-medium">
+                      <CreditCard className="w-3.5 h-3.5" />
+                      INFORMASI REKENING BCA:
+                    </p>
+                    {(() => {
+                      const selectedWarnet = warnets.find(w => String(w.id) === String(selectedWarnetId));
+                      return selectedWarnet?.bankAccountNumber ? (
+                        <>
+                          <p className="text-slate-100 font-mono font-medium text-lg leading-none mb-1">
+                            {selectedWarnet.bankAccountNumber}
+                          </p>
+                          <p className="text-slate-400 text-sm">a/n {selectedWarnet.bankAccountName || selectedWarnet.name}</p>
+                        </>
+                      ) : (
+                        <p className="text-slate-400 text-sm italic">Informasi rekening belum tersedia</p>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
               {/* Quick Amounts */}

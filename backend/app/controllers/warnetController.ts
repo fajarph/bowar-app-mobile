@@ -21,6 +21,8 @@ export default class WarnetController {
           regularPricePerHour: parseFloat(warnet.regular_price_per_hour.toString()),
           memberPricePerHour: parseFloat(warnet.member_price_per_hour.toString()),
           totalPCs: warnet.total_pcs,
+          bankAccountNumber: warnet.bank_account_number,
+          bankAccountName: warnet.bank_account_name,
         })),
       })
     } catch (error: any) {

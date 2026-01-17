@@ -142,8 +142,9 @@ export default class OperatorController {
         .count('* as total')
       const membersCount = parseInt(totalMembers[0].$extras.total.toString())
 
-      // Get pending topups count
+      // Get pending topups count for this warnet
       const pendingTopups = await BowarTransaction.query()
+        .where('warnet_id', warnetId)
         .where('type', 'topup')
         .where('status', 'pending')
         .count('* as total')
@@ -168,23 +169,14 @@ export default class OperatorController {
 
 
 
-      // Get top-up transactions from members of this warnet
-      const warnetMemberIds = await User.query()
+      // Get top-up transactions specifically for this warnet
+      const topupTransactions = await BowarTransaction.query()
         .where('warnet_id', warnetId)
-        .where('role', 'member')
-        .select('id')
-
-      const memberIds = warnetMemberIds.map((u) => u.id)
-
-      const topupTransactions = memberIds.length > 0
-        ? await BowarTransaction.query()
-          .whereIn('user_id', memberIds)
-          .where('type', 'topup')
-          .whereBetween('created_at', [startDate.toSQL()!, endDate.toSQL()!])
-          .orderBy('created_at', 'desc')
-          .preload('user')
-          .limit(50)
-        : []
+        .where('type', 'topup')
+        .whereBetween('created_at', [startDate.toSQL()!, endDate.toSQL()!])
+        .orderBy('created_at', 'desc')
+        .preload('user')
+        .limit(50)
 
       // Combine and sort all transactions
       const allTransactions = [

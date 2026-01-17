@@ -40,7 +40,7 @@ export function LoginScreen() {
         toast.error('Gagal menyimpan token. Silakan coba lagi.');
         return;
       }
-      
+
       console.log('✅ Token saved successfully after login');
       console.log('Token length:', token.length);
       console.log('Token preview:', token.substring(0, 30) + '...');
@@ -69,7 +69,7 @@ export function LoginScreen() {
       };
 
       context?.setUser(frontendUser);
-      
+
       // Also save to localStorage for persistence
       localStorage.setItem('auth_user', JSON.stringify(frontendUser));
 
@@ -78,18 +78,19 @@ export function LoginScreen() {
         const profileResponse = await getUserProfile();
         if (profileResponse.data) {
           const profileData = profileResponse.data;
-          
+
           // Map cafeWallets to ensure cafeId is string format
           const mappedCafeWallets = profileData.cafeWallets
             ? profileData.cafeWallets.map((wallet: any) => ({
-                cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
-                cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
-                remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
-                isActive: wallet.isActive || wallet.is_active || false,
-                lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
-              }))
+              cafeId: String(wallet.cafeId || wallet.warnet_id || wallet.warnetId || ''),
+              cafeName: wallet.cafeName || wallet.warnet_name || wallet.warnetName || '',
+              balance: wallet.balance || 0, // Fix: include balance
+              remainingMinutes: wallet.remainingMinutes || wallet.remaining_minutes || 0,
+              isActive: wallet.isActive || wallet.is_active || false,
+              lastUpdated: wallet.lastUpdated || wallet.last_updated || Date.now(),
+            }))
             : undefined;
-          
+
           // Debug logging - removed to prevent spam
           // Uncomment below if needed for debugging:
           // console.log('[LoginScreen] Profile Loaded After Login:', {
@@ -99,15 +100,16 @@ export function LoginScreen() {
           //   cafeWalletsCount: mappedCafeWallets?.length || 0,
           //   cafeWallets: mappedCafeWallets?.map((w: { cafeId: string; cafeName: string }) => ({ cafeId: w.cafeId, cafeName: w.cafeName }))
           // });
-          
+
           const fullUser = {
             id: String(profileData.id),
             username: profileData.username,
             email: profileData.email,
             role: profileData.role,
             avatar: profileData.avatar,
-            bowarWallet: profileData.bowarWallet || 0,
+            bowarWallet: profileData.bowarWallet || profileData.bowar_wallet || 0,
             cafeWallets: mappedCafeWallets,
+            warnet: profileData.warnet, // Crucial: include warnet for badges
           };
           context?.setUser(fullUser);
           localStorage.setItem('auth_user', JSON.stringify(fullUser));

@@ -12,6 +12,7 @@ import {
   Search,
   Image as ImageIcon,
   Loader2,
+  Users,
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { toast } from 'sonner';
@@ -21,6 +22,7 @@ import {
   rejectBookingPayment
 } from '../../services/api';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useEffect } from 'react';
 
 export function OperatorBookings() {
@@ -38,6 +40,7 @@ export function OperatorBookings() {
     type: 'approve' | 'reject';
     bookingId: number | null;
   }>({ isOpen: false, type: 'approve', bookingId: null });
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
 
   const cafe = context?.cafes.find((c) => c.id === operator?.cafeId);
 
@@ -225,7 +228,8 @@ export function OperatorBookings() {
               return (
                 <div
                   key={booking.id}
-                  className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-5"
+                  onClick={() => setSelectedBooking(booking)}
+                  className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-5 cursor-pointer hover:border-purple-500/30 transition-all group"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-3 flex-1">
@@ -392,14 +396,6 @@ export function OperatorBookings() {
                           </button>
                         </>
                       )}
-                      {booking.paymentStatus === 'paid' && booking.status === 'active' && (
-                        <button
-                          onClick={() => handleCancelBooking(Number(booking.id))}
-                          className="bg-slate-800/50 hover:bg-red-500/20 border border-slate-700/50 hover:border-red-500/50 text-slate-400 hover:text-red-400 px-4 py-2 rounded-xl text-sm transition-all"
-                        >
-                          Batalkan Booking
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -442,6 +438,141 @@ export function OperatorBookings() {
         onConfirm={confirmAction}
         onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
       />
+
+      <Dialog open={!!selectedBooking} onOpenChange={(open) => !open && setSelectedBooking(null)}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-slate-200 max-w-lg p-0 overflow-hidden rounded-3xl">
+          <DialogHeader className="p-6 pb-4 border-b border-slate-800">
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-400" />
+              Detail Booking #{selectedBooking?.id}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedBooking && (
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* User Section */}
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 flex items-center justify-center">
+                  <Users className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h4 className="text-slate-100 font-medium">
+                    {selectedBooking.user?.username || 'Tidak diketahui'}
+                    {selectedBooking.isMemberBooking && (
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded-full">
+                        MEMBER
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-slate-400 text-sm">{selectedBooking.user?.email}</p>
+                </div>
+              </div>
+
+              {/* Status Section */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
+                  <p className="text-slate-500 text-xs mb-1">Status</p>
+                  <p className={`font-medium ${selectedBooking.status === 'active' ? 'text-green-400' :
+                    selectedBooking.status === 'completed' ? 'text-blue-400' :
+                      selectedBooking.status === 'cancelled' ? 'text-red-400' : 'text-yellow-400'
+                    }`}>
+                    {selectedBooking.status.toUpperCase()}
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
+                  <p className="text-slate-500 text-xs mb-1">Pembayaran</p>
+                  <p className={`font-medium ${selectedBooking.paymentStatus === 'paid' ? 'text-green-400' : 'text-red-400'}`}>
+                    {selectedBooking.paymentStatus === 'paid' ? 'LUNAS' : 'PENDING'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Booking Details */}
+              <div className="space-y-4 bg-slate-800/30 border border-slate-700/50 rounded-3xl p-5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400 flex items-center gap-2"><Monitor className="w-4 h-4" /> Nomor PC</span>
+                  <span className="text-slate-200 font-medium">#{selectedBooking.pcNumber || 'Stored Time'}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400 flex items-center gap-2"><Calendar className="w-4 h-4" /> Tanggal</span>
+                  <span className="text-slate-200 font-medium">{formatDate(selectedBooking.bookingDate || selectedBooking.date)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400 flex items-center gap-2"><Clock className="w-4 h-4" /> Waktu</span>
+                  <span className="text-slate-200 font-medium">
+                    {selectedBooking.bookingTime || selectedBooking.time} ({selectedBooking.duration} Jam)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm pt-3 border-t border-slate-700/50">
+                  <span className="text-slate-400">Total Harga</span>
+                  <span className="text-teal-400 font-bold text-lg">{formatCurrency(selectedBooking.totalPrice)}</span>
+                </div>
+              </div>
+
+              {/* Payment Proof Section */}
+              {(selectedBooking.paymentProofImage || selectedBooking.paymentAccountName) && (
+                <div className="space-y-3">
+                  <h4 className="text-slate-300 text-sm font-medium flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-purple-400" />
+                    Bukti Transfer
+                  </h4>
+                  <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-3">
+                    {selectedBooking.paymentAccountName && (
+                      <div>
+                        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Nama Pengirim</p>
+                        <p className="text-slate-200">{selectedBooking.paymentAccountName}</p>
+                      </div>
+                    )}
+                    {selectedBooking.paymentProofImage && (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-700">
+                        <img
+                          src={`http://localhost:3333${selectedBooking.paymentProofImage}`}
+                          alt="Bukti Transfer"
+                          className="w-full aspect-video object-cover cursor-pointer hover:scale-105 transition-transform"
+                          onClick={() => setImageModal(`http://localhost:3333${selectedBooking.paymentProofImage}`)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Internal Actions */}
+              {selectedBooking.paymentStatus === 'pending' && selectedBooking.status !== 'cancelled' && (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCancelBooking(selectedBooking.id);
+                    }}
+                    className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 py-3 rounded-2xl font-medium transition-all"
+                  >
+                    Tolak
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleConfirmPayment(selectedBooking.id);
+                    }}
+                    className="bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 py-3 rounded-2xl font-medium transition-all flex items-center justify-center gap-2"
+                  >
+                    Setujui
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+            <button
+              onClick={() => setSelectedBooking(null)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-2xl font-medium transition-all"
+            >
+              Tutup
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <OperatorBottomNav />
     </div>
