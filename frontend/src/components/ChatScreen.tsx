@@ -2,58 +2,124 @@ import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { ArrowLeft, Send, MessageCircle } from 'lucide-react';
 import { BottomNav } from './BottomNav';
+import { getChatMessages, sendChatMessage, markChatMessageRead } from '../services/api';
 
 export function ChatScreen() {
   const context = useContext(AppContext);
   const [selectedCafe, setSelectedCafe] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Sync with backend when a cafe is selected
+  useEffect(() => {
+    if (!selectedCafe || !context) return;
+
+    const fetchMessages = async () => {
+      try {
+        const response = await getChatMessages(Number(selectedCafe));
+        if (response.data) {
+          const mappedMessages = response.data.map((msg: any) => {
+            // Robust mapping for snake_case or camelCase
+            const senderType = msg.sender_type || msg.senderType;
+            const createdAt = msg.created_at || msg.createdAt;
+            const isRead = msg.is_read !== undefined ? msg.is_read : msg.isRead;
+
+            let ts = Date.now();
+            if (createdAt) {
+              const parsed = new Date(createdAt).getTime();
+              if (!isNaN(parsed)) ts = parsed;
+            }
+
+            return {
+              id: String(msg.id),
+              sender: senderType,
+              message: msg.message,
+              timestamp: ts,
+              isRead: isRead,
+            };
+          });
+
+          // Replace context messages for this cafe
+          context.setChatMessages?.((prev) => ({
+            ...prev,
+            [selectedCafe]: mappedMessages,
+          }));
+
+          // Mark operator messages as read
+          const unreadOperatorMessages = mappedMessages.filter((m: any) => String(m.sender).toLowerCase() === 'operator' && !m.isRead);
+          unreadOperatorMessages.forEach(async (msg: any) => {
+            try {
+              await markChatMessageRead(Number(msg.id));
+            } catch (err) {
+              console.error('Failed to mark message as read:', err);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch messages:', error);
+      }
+    };
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, [selectedCafe, context?.setChatMessages]);
+
   useEffect(() => {
     scrollToBottom();
   }, [context?.chatMessages, selectedCafe]);
 
-  const handleSendMessage = () => {
-    if (!message.trim() || !selectedCafe) return;
+  const handleSendMessage = async () => {
+    if (!message.trim() || !selectedCafe || isSending) return;
 
-    const newMessage = {
-      id: Date.now().toString(),
-      sender: 'user' as const,
-      message: message.trim(),
-      timestamp: Date.now(),
-    };
-
-    context?.addChatMessage(selectedCafe, newMessage);
+    setIsSending(true);
+    const messageText = message.trim();
     setMessage('');
 
-    // Simulate operator response after 2 seconds
-    setTimeout(() => {
-      const responses = [
-        'Halo! Ada yang bisa saya bantu?',
-        'Baik, biar saya cek dulu ya.',
-        'Terima kasih sudah menghubungi kami. Saya akan bantu Anda sekarang!',
-        'Ada yang lain bisa saya bantu?',
-        'Siap! Saya akan proses permintaan Anda.',
-      ];
+    try {
+      const response = await sendChatMessage({
+        message: messageText,
+        warnet_id: Number(selectedCafe),
+      });
 
-      const operatorMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'operator' as const,
-        message: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: Date.now(),
-      };
+      // Handle response data (Adonis returns the object directly)
+      if (response) {
+        const msgData = response.data || response;
+        const senderType = msgData.sender_type || msgData.senderType || ('user' as const);
+        const createdAt = msgData.created_at || msgData.createdAt;
 
-      context?.addChatMessage(selectedCafe, operatorMessage);
-    }, 2000);
+        const newMessage = {
+          id: String(msgData.id),
+          sender: senderType as 'user' | 'operator',
+          message: msgData.message,
+          timestamp: createdAt ? new Date(createdAt).getTime() : Date.now(),
+          isRead: true
+        };
+
+        context?.addChatMessage(selectedCafe, newMessage);
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setMessage(messageText); // Restore message on failure
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  const formatTime = (timestamp: number) => {
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return '--:--';
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    if (isNaN(date.getTime())) return '--:--';
+    return date.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
   };
 
   if (!selectedCafe) {
@@ -70,9 +136,9 @@ export function ChatScreen() {
           <div className="px-6 py-5">
             <h1 className="text-slate-200 flex items-center gap-2">
               <MessageCircle className="w-6 h-6 text-cyan-400" />
-              💬 Chat dengan Operator
+              💬 Obrolan Cafe
             </h1>
-            <p className="text-slate-400 text-sm">Pilih warnet untuk chat</p>
+            <p className="text-slate-400 text-sm">Hubungi operator warnet</p>
           </div>
         </div>
 
@@ -81,7 +147,7 @@ export function ChatScreen() {
           {context?.cafes.slice(0, 5).map((cafe) => {
             const messages = context.chatMessages[cafe.id] || [];
             const lastMessage = messages[messages.length - 1];
-            const unreadCount = messages.filter((m) => m.sender === 'operator').length % 3;
+            const unreadCount = messages.filter((m) => String(m.sender).toLowerCase() === 'operator' && !m.isRead).length;
 
             return (
               <button
@@ -92,10 +158,10 @@ export function ChatScreen() {
                 <div className="flex items-center gap-4">
                   <div className="relative">
                     <div className="bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/50 rounded-2xl p-3">
-                      <MessageCircle className="w-6 h-6 text-cyan-400" />
+                      <MessageCircle className="w-6 h-6 text-cyan-400 group-hover:scale-110 transition-transform" />
                     </div>
                     {unreadCount > 0 && (
-                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center">
                         {unreadCount}
                       </div>
                     )}
@@ -104,7 +170,7 @@ export function ChatScreen() {
                     <h3 className="text-slate-200 mb-1 truncate">{cafe.name}</h3>
                     {lastMessage ? (
                       <p className="text-slate-400 text-sm truncate">
-                        {lastMessage.sender === 'user' ? 'Anda: ' : 'Operator: '}
+                        {String(lastMessage.sender).toLowerCase() === 'user' ? 'Anda: ' : ''}
                         {lastMessage.message}
                       </p>
                     ) : (
@@ -175,29 +241,29 @@ export function ChatScreen() {
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+            {messages.map((msg) => {
+              const isMe = String(msg.sender).toLowerCase() === 'user';
+              return (
                 <div
-                  className={`max-w-[75%] rounded-2xl p-4 ${
-                    msg.sender === 'user'
-                      ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/20'
-                      : 'bg-gradient-to-br from-purple-500/20 to-purple-500/10 border border-purple-500/30 text-slate-200 shadow-lg shadow-purple-500/10'
-                  }`}
+                  key={msg.id}
+                  className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}
                 >
-                  <p className="text-sm leading-relaxed">{msg.message}</p>
-                  <p
-                    className={`text-xs mt-2 ${
-                      msg.sender === 'user' ? 'text-cyan-100' : 'text-slate-400'
-                    }`}
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 relative ${isMe
+                      ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-tr-none shadow-md'
+                      : 'bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-none shadow-md'
+                      }`}
                   >
-                    {formatTime(msg.timestamp)}
-                  </p>
+                    <p className="text-[15px] leading-relaxed pr-8">{msg.message}</p>
+                    <div className="flex justify-end items-center mt-1 -mr-1">
+                      <span className={`text-[10px] ${isMe ? 'text-cyan-100' : 'text-slate-500'}`}>
+                        {formatTime(msg.timestamp)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div ref={messagesEndRef} />
           </>
         )}
@@ -223,8 +289,8 @@ export function ChatScreen() {
           </div>
           <button
             onClick={handleSendMessage}
-            disabled={!message.trim()}
-            className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white p-3.5 rounded-2xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 disabled:shadow-none"
+            disabled={!message.trim() || isSending}
+            className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white p-3.5 rounded-2xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50"
           >
             <Send className="w-5 h-5" />
           </button>

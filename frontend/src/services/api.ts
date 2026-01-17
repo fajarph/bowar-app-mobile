@@ -538,3 +538,33 @@ export const rejectBookingPayment = async (bookingId: number) => {
 
 
 export default api;
+// Chat Functions
+export const getChatMessages = async (warnetId: number) => {
+  const response = await api.get(`/chat/${warnetId}`);
+  return response.data;
+};
+
+export const sendChatMessage = async (data: {
+  message: string,
+  warnet_id?: number,
+  user_id?: number
+}) => {
+  const response = await api.post('/chat', data);
+  return response.data;
+};
+
+export const markChatMessageRead = async (id: number) => {
+  const response = await api.patch(`/chat/read/${id}`);
+  return response.data;
+};
+
+// Operator Chat Functions
+export const getOperatorConversations = async () => {
+  const response = await api.get('/operator/conversations');
+  return response.data;
+};
+
+export const getOperatorChatMessages = async (userId: number) => {
+  const response = await api.get(`/operator/chat/${userId}`);
+  return response.data;
+};

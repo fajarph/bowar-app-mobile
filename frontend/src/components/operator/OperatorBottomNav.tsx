@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Monitor, Users, Calendar, Wallet } from 'lucide-react';
+import { LayoutDashboard, Monitor, Users, Calendar, Wallet, MessageCircle } from 'lucide-react';
 
 export function OperatorBottomNav() {
   const navigate = useNavigate();
@@ -8,6 +8,7 @@ export function OperatorBottomNav() {
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/operator/dashboard' },
     { icon: Monitor, label: 'Grid PC', path: '/operator/pc-grid' },
+    { icon: MessageCircle, label: 'Chat', path: '/operator/chat' },
     { icon: Calendar, label: 'Booking', path: '/operator/bookings' },
     { icon: Users, label: 'Member', path: '/operator/members' },
     { icon: Wallet, label: 'Top Up', path: '/operator/topups' },
@@ -28,22 +29,19 @@ export function OperatorBottomNav() {
                 className="flex flex-col items-center gap-1 min-w-[50px] flex-1 group"
               >
                 <div
-                  className={`p-2 rounded-xl transition-all ${
-                    isActive
-                      ? 'bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/50 shadow-lg shadow-purple-500/20'
-                      : 'bg-transparent group-hover:bg-slate-800/50'
-                  }`}
+                  className={`p-2 rounded-xl transition-all ${isActive
+                    ? 'bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/50 shadow-lg shadow-purple-500/20'
+                    : 'bg-transparent group-hover:bg-slate-800/50'
+                    }`}
                 >
                   <Icon
-                    className={`w-4 h-4 transition-colors ${
-                      isActive ? 'text-purple-400' : 'text-slate-400 group-hover:text-slate-300'
-                    }`}
+                    className={`w-4 h-4 transition-colors ${isActive ? 'text-purple-400' : 'text-slate-400 group-hover:text-slate-300'
+                      }`}
                   />
                 </div>
                 <span
-                  className={`text-[10px] transition-colors leading-tight ${
-                    isActive ? 'text-purple-400' : 'text-slate-500 group-hover:text-slate-400'
-                  }`}
+                  className={`text-[10px] transition-colors leading-tight ${isActive ? 'text-purple-400' : 'text-slate-500 group-hover:text-slate-400'
+                    }`}
                 >
                   {item.label}
                 </span>

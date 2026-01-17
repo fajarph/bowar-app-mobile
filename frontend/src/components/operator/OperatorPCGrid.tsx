@@ -6,6 +6,8 @@ import { Monitor, User, LogIn, LogOut, Clock, Crown, Search } from 'lucide-react
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { toast } from 'sonner';
+import { useEffect } from 'react';
+import { getWarnetDetail } from '../../services/api';
 
 export function OperatorPCGrid() {
   const context = useContext(AppContext);
@@ -31,6 +33,36 @@ export function OperatorPCGrid() {
     u.cafeWallets?.some((w) => w.cafeId === operator?.cafeId)
   ) || [];
 
+  // Sync PC statuses from API
+  useEffect(() => {
+    const loadPCStatuses = async () => {
+      if (operator?.cafeId && context?.setPcStatuses) {
+        try {
+          const response = await getWarnetDetail(Number(operator.cafeId));
+          if (response.data?.pcs) {
+            context.setPcStatuses((prev) => ({
+              ...prev,
+              [operator.cafeId]: response.data.pcs.map((pc: any) => ({
+                id: String(pc.id),
+                number: pc.number,
+                status: pc.status,
+                remainingMinutes: pc.remainingMinutes,
+                sessionStartTime: pc.status === 'occupied' ? Date.now() : undefined,
+              })),
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to sync PC statuses for operator:', error);
+        }
+      }
+    };
+
+    loadPCStatuses();
+    // Poll every 30 seconds for operator
+    const interval = setInterval(loadPCStatuses, 30000);
+    return () => clearInterval(interval);
+  }, [operator?.cafeId, context?.setPcStatuses]);
+
   // Filter members by search
   const filteredMembers = cafeMembers.filter(
     (m) =>
@@ -38,22 +70,30 @@ export function OperatorPCGrid() {
       m.email.toLowerCase().includes(memberSearch.toLowerCase())
   );
 
-  // Get PC status
+  // Get PC status from global context
   const getPCStatus = useCallback((pcNum: number) => {
-    const booking = activeBookings.find((b) => b.pcNumber === pcNum);
-    if (booking) {
-      const user = context?.registeredUsers.find((u) => u.id === booking.userId);
+    if (!operator?.cafeId || !context?.pcStatuses[operator.cafeId]) {
+      return { status: 'available' as const };
+    }
+
+    const pc = context.pcStatuses[operator.cafeId].find((p) => p.number === pcNum);
+    if (pc && pc.status === 'occupied') {
+      // Find the user if possible (matching by pcNumber in active bookings or other logic)
+      const booking = activeBookings.find((b) => b.pcNumber === pcNum);
+      const user = booking ? context?.registeredUsers.find((u) => u.id === booking.userId) : undefined;
       const memberWallet = user?.cafeWallets?.find((w) => w.cafeId === operator?.cafeId);
+
       return {
         status: 'occupied' as const,
         user,
         booking,
         isMember: !!memberWallet,
         isActive: memberWallet?.isActive || false,
+        remainingMinutes: pc.remainingMinutes
       };
     }
     return { status: 'available' as const };
-  }, [activeBookings, context?.registeredUsers, operator?.cafeId]);
+  }, [context?.pcStatuses, operator?.cafeId, activeBookings, context?.registeredUsers]);
 
   const handlePCClick = useCallback((pcNum: number) => {
     setSelectedPC(pcNum);
@@ -67,7 +107,7 @@ export function OperatorPCGrid() {
     if (selectedPC === null || !operator?.cafeId) return;
 
     const memberWallet = member.cafeWallets?.find((w: CafeWallet) => w.cafeId === operator.cafeId);
-    
+
     if (!memberWallet || memberWallet.remainingMinutes <= 0) {
       toast.error('Member tidak memiliki waktu tersimpan. Silakan tambahkan waktu dulu.');
       return;
@@ -177,31 +217,28 @@ export function OperatorPCGrid() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setFilterStatus('all')}
-              className={`px-4 py-2 rounded-2xl text-sm transition-all ${
-                filterStatus === 'all'
-                  ? 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm transition-all ${filterStatus === 'all'
+                ? 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               All ({totalPCs})
             </button>
             <button
               onClick={() => setFilterStatus('available')}
-              className={`px-4 py-2 rounded-2xl text-sm transition-all ${
-                filterStatus === 'available'
-                  ? 'bg-green-500/20 border border-green-500/50 text-green-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm transition-all ${filterStatus === 'available'
+                ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               Available ({totalPCs - activeBookings.length})
             </button>
             <button
               onClick={() => setFilterStatus('occupied')}
-              className={`px-4 py-2 rounded-2xl text-sm transition-all ${
-                filterStatus === 'occupied'
-                  ? 'bg-red-500/20 border border-red-500/50 text-red-400'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
-              }`}
+              className={`px-4 py-2 rounded-2xl text-sm transition-all ${filterStatus === 'occupied'
+                ? 'bg-red-500/20 border border-red-500/50 text-red-400'
+                : 'bg-slate-800/50 border border-slate-700/50 text-slate-400'
+                }`}
             >
               Occupied ({activeBookings.length})
             </button>
@@ -221,22 +258,19 @@ export function OperatorPCGrid() {
               <div
                 key={pcNum}
                 onClick={() => handlePCClick(pcNum)}
-                className={`aspect-square rounded-2xl border-2 transition-all cursor-pointer ${
-                  isAvailable
-                    ? 'bg-slate-900/50 border-green-500/30 hover:border-green-500/50 hover:bg-green-500/10'
-                    : 'bg-blue-900/20 border-blue-500/50 hover:border-blue-500/70'
-                }`}
+                className={`aspect-square rounded-2xl border-2 transition-all cursor-pointer ${isAvailable
+                  ? 'bg-slate-900/50 border-green-500/30 hover:border-green-500/50 hover:bg-green-500/10'
+                  : 'bg-blue-900/20 border-blue-500/50 hover:border-blue-500/70'
+                  }`}
               >
                 <div className="flex flex-col items-center justify-center h-full p-2">
                   <Monitor
-                    className={`w-6 h-6 mb-1 ${
-                      isAvailable ? 'text-green-400' : 'text-blue-400'
-                    }`}
+                    className={`w-6 h-6 mb-1 ${isAvailable ? 'text-green-400' : 'text-blue-400'
+                      }`}
                   />
                   <span
-                    className={`text-sm ${
-                      isAvailable ? 'text-green-300' : 'text-blue-300'
-                    }`}
+                    className={`text-sm ${isAvailable ? 'text-green-300' : 'text-blue-300'
+                      }`}
                   >
                     {pcNum}
                   </span>
@@ -335,11 +369,10 @@ export function OperatorPCGrid() {
                       key={member.id}
                       onClick={() => handleMemberLogin(member)}
                       disabled={remainingMinutes <= 0 || isActive}
-                      className={`w-full bg-slate-800/50 border rounded-2xl p-4 text-left transition-all ${
-                        remainingMinutes > 0 && !isActive
-                          ? 'border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800'
-                          : 'border-slate-800/50 opacity-50 cursor-not-allowed'
-                      }`}
+                      className={`w-full bg-slate-800/50 border rounded-2xl p-4 text-left transition-all ${remainingMinutes > 0 && !isActive
+                        ? 'border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800'
+                        : 'border-slate-800/50 opacity-50 cursor-not-allowed'
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">

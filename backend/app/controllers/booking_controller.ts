@@ -199,12 +199,19 @@ export default class BookingController {
                     // Operator will approve later
                 }
 
-                // Update PC status if payment is completed
-                if (booking.payment_status === 'paid' && pc) {
-                    pc.status = 'occupied'
-                    pc.current_booking_id = booking.id
-                    pc.useTransaction(trx)
-                    await pc.save()
+                // Update PC status if payment is completed (ensure record exists)
+                if (booking.payment_status === 'paid') {
+                    await Pc.updateOrCreate(
+                        {
+                            warnet_id: warnetId,
+                            pc_number: pcNumber
+                        },
+                        {
+                            status: 'occupied',
+                            current_booking_id: booking.id
+                        },
+                        { client: trx }
+                    )
                 }
 
                 await trx.commit()

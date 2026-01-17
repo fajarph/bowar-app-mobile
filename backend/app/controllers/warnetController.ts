@@ -50,6 +50,9 @@ export default class WarnetController {
       // Load rules for this warnet
       const rules = await Rule.query().where('warnet_id', warnet.id)
 
+      // Load PCs for this warnet with current bookings for status
+      const pcs = await warnet.related('pcs').query().preload('currentBooking')
+
       return response.ok({
         message: 'Detail warnet berhasil diambil',
         data: {
@@ -69,6 +72,34 @@ export default class WarnetController {
           bankAccountNumber: warnet.bank_account_number,
           bankAccountName: warnet.bank_account_name,
           rules: rules.map((rule) => rule.description || rule.value || rule.rule_text || ''),
+          pcs: Array.from({ length: warnet.total_pcs }, (_, i) => {
+            const pcNumber = i + 1
+            const pcRecord = pcs.find((p) => p.pc_number === pcNumber)
+
+            if (pcRecord) {
+              const currentBooking = pcRecord.currentBooking
+              let remainingMinutes: number | undefined = undefined
+
+              if (pcRecord.status === 'occupied' && currentBooking) {
+                remainingMinutes = currentBooking.getRemainingMinutes() || undefined
+              }
+
+              return {
+                id: pcRecord ? pcRecord.id : `temp-${warnet.id}-${pcNumber}`,
+                number: pcNumber,
+                status: pcRecord ? pcRecord.status : 'available',
+                remainingMinutes,
+              }
+            }
+
+            // If no record exists, default to available
+            return {
+              id: `temp-${warnet.id}-${pcNumber}`,
+              number: pcNumber,
+              status: 'available',
+              remainingMinutes: undefined,
+            }
+          }),
         },
       })
     } catch (error: any) {

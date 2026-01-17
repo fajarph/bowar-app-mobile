@@ -20,6 +20,7 @@ const BowarTransactionController = () =>
 const OperatorController = () => import('../app/controllers/operator_controller.js')
 const BookingController = () => import('../app/controllers/booking_controller.js')
 const OperatorBookingsController = () => import('../app/controllers/operator_bookings_controller.js')
+const ChatController = () => import('../app/controllers/chat_controller.js')
 
 router.get('/', async () => {
   return {
@@ -107,3 +108,12 @@ router.get('/operator/bookings', [OperatorBookingsController, 'index']).use(midd
 router.get('/operator/bookings/pending', [OperatorBookingsController, 'pending']).use(middleware.auth())
 router.post('/operator/bookings/:id/approve', [OperatorBookingsController, 'approve']).use(middleware.auth())
 router.post('/operator/bookings/:id/reject', [OperatorBookingsController, 'reject']).use(middleware.auth())
+
+// Chat Routes
+router.get('/chat/:warnetId', [ChatController, 'index']).use(middleware.auth())
+router.post('/chat', [ChatController, 'store']).use(middleware.auth())
+router.patch('/chat/read/:id', [ChatController, 'markRead']).use(middleware.auth())
+
+// Operator Chat Routes
+router.get('/operator/conversations', [ChatController, 'getConversations']).use(middleware.auth())
+router.get('/operator/chat/:userId', [ChatController, 'index']).use(middleware.auth())

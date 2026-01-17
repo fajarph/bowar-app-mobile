@@ -166,18 +166,18 @@ export default class OperatorBookingsController {
                 booking.useTransaction(trx)
                 await booking.save()
 
-                // Update PC status to occupied
-                const pc = await Pc.query()
-                    .where('warnet_id', booking.warnet_id)
-                    .where('pc_number', booking.pc_number)
-                    .first()
-
-                if (pc) {
-                    pc.status = 'occupied'
-                    pc.current_booking_id = booking.id
-                    pc.useTransaction(trx)
-                    await pc.save()
-                }
+                // Update PC status to occupied (ensure record exists)
+                await Pc.updateOrCreate(
+                    {
+                        warnet_id: booking.warnet_id,
+                        pc_number: booking.pc_number
+                    },
+                    {
+                        status: 'occupied',
+                        current_booking_id: booking.id
+                    },
+                    { client: trx }
+                )
 
                 await trx.commit()
 

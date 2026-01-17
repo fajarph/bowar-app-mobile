@@ -18,8 +18,10 @@ export interface AppContextType {
   extendWallet: (cafeId: string, minutes: number) => void;
   updateMemberWallet: (userId: string, cafeId: string, updates: Partial<CafeWallet>) => void;
   chatMessages: { [cafeId: string]: ChatMessage[] };
+  setChatMessages: Dispatch<SetStateAction<{ [cafeId: string]: ChatMessage[] }>>;
   addChatMessage: (cafeId: string, message: ChatMessage) => void;
   pcStatuses: { [cafeId: string]: PCStatus[] };
+  setPcStatuses: Dispatch<SetStateAction<{ [cafeId: string]: PCStatus[] }>>;
   getPCsForCafe: (cafeId: string) => PCStatus[];
   registeredUsers: RegisteredUser[];
   operators: Operator[];

@@ -42,6 +42,21 @@ export function CafeDetailsScreen() {
             email: response.data.email,
             operatingHours: response.data.operatingHours,
           });
+
+          // Sync PC statuses to global context
+          if (response.data.pcs && context?.setPcStatuses) {
+            context.setPcStatuses((prev) => ({
+              ...prev,
+              [cafeId]: response.data.pcs.map((pc: any) => ({
+                id: String(pc.id),
+                number: pc.number,
+                status: pc.status,
+                remainingMinutes: pc.remainingMinutes,
+                // We don't have sessionStartTime from API yet, but we have remainingMinutes
+                sessionStartTime: pc.status === 'occupied' ? Date.now() : undefined,
+              })),
+            }));
+          }
         }
       } catch (error) {
         console.error('Failed to load warnet detail:', error);

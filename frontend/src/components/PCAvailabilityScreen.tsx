@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AppContext, type PCStatus } from '../App';
 import { ArrowLeft, Monitor, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { getWarnetDetail } from '../services/api';
 
 export function PCAvailabilityScreen() {
   const { cafeId } = useParams<{ cafeId: string }>();
@@ -13,19 +14,49 @@ export function PCAvailabilityScreen() {
 
   const cafe = context?.cafes.find((c) => c.id === cafeId);
 
-  // Get PCs from context in useEffect to avoid setState during render
+  // Get PCs from context in useEffect and fetch latest from API
   useEffect(() => {
-    if (cafeId && context) {
-      const pcList = context.getPCsForCafe(cafeId);
-      setPcs(pcList);
-    }
-  }, [cafeId, context]);
+    const loadData = async () => {
+      if (cafeId && context) {
+        // Initial load from context
+        const pcList = context.getPCsForCafe(cafeId);
+        setPcs(pcList);
+
+        // Fetch latest from API to ensure synchronization
+        try {
+          const response = await getWarnetDetail(Number(cafeId));
+          if (response.data?.pcs && context.setPcStatuses) {
+            const mappedPcs = response.data.pcs.map((pc: any) => ({
+              id: String(pc.id),
+              number: pc.number,
+              status: pc.status,
+              remainingMinutes: pc.remainingMinutes,
+              sessionStartTime: pc.status === 'occupied' ? Date.now() : undefined,
+            }));
+
+            context.setPcStatuses((prev) => ({
+              ...prev,
+              [cafeId]: mappedPcs,
+            }));
+            setPcs(mappedPcs);
+          }
+        } catch (error) {
+          console.error('Failed to sync PC statuses:', error);
+        }
+      }
+    };
+
+    loadData();
+    // Poll every 30 seconds
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [cafeId, context?.setPcStatuses]);
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = Math.floor(minutes % 60);
     const secs = Math.floor((minutes % 1) * 60);
-    
+
     if (hours > 0) {
       return `${hours}h ${mins}m`;
     }
@@ -108,7 +139,7 @@ export function PCAvailabilityScreen() {
 
               return (
                 <button
-                  key={pc.id}
+                  key={pc.number}
                   onClick={() => {
                     setSelectedPC(pc.number);
                     if (!isAvailable) {
@@ -117,12 +148,11 @@ export function PCAvailabilityScreen() {
                   }}
                   className={`
                     aspect-square rounded-xl p-2 transition-all
-                    ${
-                      isAvailable
-                        ? isSelected
-                          ? 'bg-gradient-to-br from-blue-500/30 to-purple-500/30 border-2 border-teal-400 shadow-lg shadow-blue-500/30'
-                          : 'bg-gradient-to-br from-green-500/20 to-green-500/10 border border-green-500/40 hover:border-green-400 hover:from-green-500/30 hover:to-green-500/20'
-                        : isSelected
+                    ${isAvailable
+                      ? isSelected
+                        ? 'bg-gradient-to-br from-blue-500/30 to-purple-500/30 border-2 border-teal-400 shadow-lg shadow-blue-500/30'
+                        : 'bg-gradient-to-br from-green-500/20 to-green-500/10 border border-green-500/40 hover:border-green-400 hover:from-green-500/30 hover:to-green-500/20'
+                      : isSelected
                         ? 'bg-gradient-to-br from-amber-500/30 to-orange-500/30 border-2 border-amber-400 shadow-lg shadow-amber-500/30'
                         : 'bg-slate-900/50 border border-red-500/30 hover:border-amber-500/50 hover:bg-gradient-to-br hover:from-amber-500/10 hover:to-orange-500/10'
                     }
@@ -130,26 +160,24 @@ export function PCAvailabilityScreen() {
                 >
                   <div className="h-full flex flex-col items-center justify-center gap-1">
                     <Monitor
-                      className={`w-4 h-4 ${
-                        isAvailable
-                          ? isSelected
-                            ? 'text-teal-400'
-                            : 'text-green-400'
-                          : isSelected
+                      className={`w-4 h-4 ${isAvailable
+                        ? isSelected
+                          ? 'text-teal-400'
+                          : 'text-green-400'
+                        : isSelected
                           ? 'text-amber-400'
                           : 'text-red-400'
-                      }`}
+                        }`}
                     />
                     <span
-                      className={`text-xs ${
-                        isAvailable
-                          ? isSelected
-                            ? 'text-teal-300'
-                            : 'text-green-300'
-                          : isSelected
+                      className={`text-xs ${isAvailable
+                        ? isSelected
+                          ? 'text-teal-300'
+                          : 'text-green-300'
+                        : isSelected
                           ? 'text-amber-300'
                           : 'text-red-300'
-                      }`}
+                        }`}
                     >
                       {pc.number}
                     </span>
@@ -171,7 +199,7 @@ export function PCAvailabilityScreen() {
         {/* Legend with Detailed Explanations */}
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-5 space-y-4">
           <h3 className="text-slate-200 mb-1">Keterangan Status PC</h3>
-          
+
           <div className="space-y-3">
             {/* Available */}
             <div className="flex items-start gap-3">

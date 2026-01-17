@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { getUserProfile, getWarnets } from './services/api';
 import { LoginScreen } from './components/LoginScreen';
@@ -28,6 +28,7 @@ import { OperatorBookings } from './components/operator/OperatorBookings';
 import { OperatorMembers } from './components/operator/OperatorMembers';
 import { OperatorTopups } from './components/operator/OperatorTopups';
 import { OperatorTopupConfirmScreen } from './components/operator/OperatorTopupConfirmScreen';
+import { OperatorChatScreen } from './components/operator/OperatorChatScreen';
 
 // Types
 export interface User {
@@ -107,6 +108,7 @@ export interface ChatMessage {
   sender: 'user' | 'operator';
   message: string;
   timestamp: number;
+  isRead?: boolean;
 }
 
 export interface Operator {
@@ -119,7 +121,7 @@ export interface Operator {
   role: 'operator';
 }
 
-import { AppContext, type AppContextType } from './contexts/AppContext';
+import { AppContext } from './contexts/AppContext';
 
 // Re-export for backward compatibility
 export { AppContext };
@@ -580,31 +582,31 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const addBooking = (booking: Booking) => {
+  const addBooking = useCallback((booking: Booking) => {
     setBookings((prev) => [...prev, booking]);
-  };
+  }, []);
 
-  const cancelBooking = (bookingId: string) => {
+  const cancelBooking = useCallback((bookingId: string) => {
     setBookings((prev) =>
       prev.map((b) =>
         b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
       )
     );
-  };
+  }, []);
 
-  const updateBooking = (bookingId: string, updates: Partial<Booking>) => {
+  const updateBooking = useCallback((bookingId: string, updates: Partial<Booking>) => {
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, ...updates } : b))
     );
-  };
+  }, []);
 
-  const updateBookingStatus = (bookingId: string, status: 'active' | 'completed' | 'cancelled') => {
+  const updateBookingStatus = useCallback((bookingId: string, status: 'active' | 'completed' | 'cancelled') => {
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
     );
-  };
+  }, []);
 
-  const updateWallet = (cafeId: string, minutes: number, isActive: boolean) => {
+  const updateWallet = useCallback((cafeId: string, minutes: number, isActive: boolean) => {
     setUser((prev) => {
       if (!prev?.cafeWallets) return prev;
 
@@ -616,16 +618,15 @@ function App() {
 
       const updatedUser = { ...prev, cafeWallets: updatedWallets };
 
-      // Sync to registeredUsers for persistence
       setRegisteredUsers((users) =>
         users.map((u) => (u.id === prev.id ? { ...u, cafeWallets: updatedWallets } : u))
       );
 
       return updatedUser;
     });
-  };
+  }, []);
 
-  const extendWallet = (cafeId: string, minutes: number) => {
+  const extendWallet = useCallback((cafeId: string, minutes: number) => {
     setUser((prev) => {
       if (!prev?.cafeWallets) return prev;
 
@@ -637,16 +638,15 @@ function App() {
 
       const updatedUser = { ...prev, cafeWallets: updatedWallets };
 
-      // Sync to registeredUsers for persistence
       setRegisteredUsers((users) =>
         users.map((u) => (u.id === prev.id ? { ...u, cafeWallets: updatedWallets } : u))
       );
 
       return updatedUser;
     });
-  };
+  }, []);
 
-  const updateMemberWallet = (userId: string, cafeId: string, updates: Partial<CafeWallet>) => {
+  const updateMemberWallet = useCallback((userId: string, cafeId: string, updates: Partial<CafeWallet>) => {
     setRegisteredUsers((prev) =>
       prev.map((u) => {
         if (u.id === userId && u.cafeWallets) {
@@ -658,22 +658,20 @@ function App() {
         return u;
       })
     );
-  };
+  }, []);
 
-  const addChatMessage = (cafeId: string, message: ChatMessage) => {
+  const addChatMessage = useCallback((cafeId: string, message: ChatMessage) => {
     setChatMessages((prev) => ({
       ...prev,
       [cafeId]: [...(prev[cafeId] || []), message],
     }));
-  };
+  }, []);
 
-  // Register a new user
-  const registerUser = (user: RegisteredUser) => {
+  const registerUser = useCallback((user: RegisteredUser) => {
     setRegisteredUsers((prev) => [...prev, user]);
-  };
+  }, []);
 
-  // Find user by credentials for login
-  const findUserByCredentials = (
+  const findUserByCredentials = useCallback((
     username: string,
     password: string,
     role: 'regular' | 'member'
@@ -683,53 +681,50 @@ function App() {
     );
 
     if (registered) {
-      // Return user without password
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password: _password, ...userWithoutPassword } = registered;
       return userWithoutPassword;
     }
 
     return null;
-  };
+  }, [registeredUsers]);
 
-  // Get bookings for current logged-in user only
-  const getUserBookings = (): Booking[] => {
+  const getUserBookings = useCallback((): Booking[] => {
     if (!user) return [];
     return bookings.filter((booking) => booking.userId === user.id);
-  };
+  }, [user, bookings]);
 
-  // Initialize PCs for a cafe if not already initialized
-  const getPCsForCafe = (cafeId: string): PCStatus[] => {
-    if (pcStatuses[cafeId]) {
-      return pcStatuses[cafeId];
+  // Sync pcStatuses to a ref for access within stable callbacks
+  const pcStatusesRef = useRef(pcStatuses);
+  useEffect(() => {
+    pcStatusesRef.current = pcStatuses;
+  }, [pcStatuses]);
+
+  const getPCsForCafe = useCallback((cafeId: string): PCStatus[] => {
+    // Check ref for latest status without depending on pcStatuses state
+    const currentStatuses = pcStatusesRef.current[cafeId];
+    if (currentStatuses) {
+      return currentStatuses;
     }
 
     const cafe = cafes.find((c) => c.id === cafeId);
     if (!cafe) return [];
 
-    // Initialize PCs for this cafe
-    const newPCs: PCStatus[] = [];
-    for (let i = 1; i <= cafe.totalPCs; i++) {
-      // 70% available, 30% occupied for initial state
-      const isOccupied = Math.random() < 0.3;
-
-      newPCs.push({
-        id: `${cafeId}-pc-${i}`,
-        number: i,
-        status: isOccupied ? 'occupied' : 'available',
-        remainingMinutes: isOccupied ? Math.floor(Math.random() * 120) + 10 : undefined,
-        sessionStartTime: isOccupied ? Date.now() - Math.random() * 3600000 : undefined,
-      });
-    }
-
-    // Store the initialized PCs
-    setPcStatuses((prev) => ({
-      ...prev,
-      [cafeId]: newPCs,
+    const newPCs: PCStatus[] = Array.from({ length: cafe.totalPCs }, (_, i) => ({
+      id: `${cafeId}-pc-${i + 1}`,
+      number: i + 1,
+      status: 'available',
     }));
 
+    setPcStatuses((prev) => {
+      if (prev[cafeId]) return prev; // Avoid redundant updates
+      return {
+        ...prev,
+        [cafeId]: newPCs,
+      };
+    });
+
     return newPCs;
-  };
+  }, [cafes]);
 
   // Real-time countdown for occupied PCs
   useEffect(() => {
@@ -761,12 +756,13 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const contextValue: AppContextType = {
+  const contextValue = useMemo(() => ({
     user,
     setUser,
     operator,
     setOperator,
     pcStatuses,
+    setPcStatuses,
     getPCsForCafe,
     cafes,
     bookings,
@@ -779,12 +775,35 @@ function App() {
     extendWallet,
     updateMemberWallet,
     chatMessages,
+    setChatMessages,
     addChatMessage,
     registeredUsers,
     registerUser,
     findUserByCredentials,
     operators,
-  };
+  }), [
+    user,
+    operator,
+    pcStatuses,
+    cafes,
+    bookings,
+    chatMessages,
+    registeredUsers,
+    operators,
+    addBooking,
+    cancelBooking,
+    updateBooking,
+    updateBookingStatus,
+    updateWallet,
+    extendWallet,
+    updateMemberWallet,
+    chatMessages,
+    addChatMessage,
+    registerUser,
+    findUserByCredentials,
+    getUserBookings,
+    getPCsForCafe,
+  ]);
 
   return (
     <AppContext.Provider value={contextValue}>
@@ -894,6 +913,10 @@ function App() {
             <Route
               path="/operator/topups/:topupId/confirm"
               element={operator ? <OperatorTopupConfirmScreen /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/chat"
+              element={operator ? <OperatorChatScreen /> : <Navigate to="/operator/login" />}
             />
           </Routes>
           <Toaster />
