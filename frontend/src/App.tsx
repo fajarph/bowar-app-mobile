@@ -29,6 +29,7 @@ import { OperatorMembers } from './components/operator/OperatorMembers';
 import { OperatorTopups } from './components/operator/OperatorTopups';
 import { OperatorTopupConfirmScreen } from './components/operator/OperatorTopupConfirmScreen';
 import { OperatorChatScreen } from './components/operator/OperatorChatScreen';
+import { OperatorManagementScreen } from './components/operator/OperatorManagementScreen';
 
 // Types
 export interface User {
@@ -917,6 +918,10 @@ function App() {
             <Route
               path="/operator/chat"
               element={operator ? <OperatorChatScreen /> : <Navigate to="/operator/login" />}
+            />
+            <Route
+              path="/operator/management"
+              element={operator ? <OperatorManagementScreen /> : <Navigate to="/operator/login" />}
             />
           </Routes>
           <Toaster />
