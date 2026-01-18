@@ -5,7 +5,6 @@ import {
     Clock,
     Monitor,
     User,
-    DollarSign,
     CheckCircle,
     XCircle,
     Image as ImageIcon,

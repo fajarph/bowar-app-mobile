@@ -1,10 +1,8 @@
 import { useContext, useMemo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../App';
-import type { ChatMessage } from '../../App';
 import {
   Monitor,
-  Users,
   DollarSign,
   Calendar,
   TrendingUp,
@@ -42,7 +40,6 @@ export function OperatorDashboard() {
     pendingBookings: number;
     transactions: any[];
   } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   if (!operator) {
@@ -58,7 +55,6 @@ export function OperatorDashboard() {
       if (!operator?.cafeId) return;
 
       try {
-        setLoading(true);
         const warnetId = parseInt(operator.cafeId);
         const response = await getWarnetStatistics(warnetId);
 
@@ -77,7 +73,7 @@ export function OperatorDashboard() {
         console.error('Failed to load statistics:', error);
         toast.error('Gagal memuat statistik');
       } finally {
-        setLoading(false);
+        // No-op
       }
     };
 
