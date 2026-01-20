@@ -7,7 +7,7 @@ import axios from 'axios';
  * 
  * Default: http://localhost:3333 (default AdonisJS port)
  */
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
 
 // Create axios instance
 const api = axios.create({

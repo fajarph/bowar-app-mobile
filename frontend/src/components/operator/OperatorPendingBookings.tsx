@@ -12,7 +12,9 @@ import {
 } from 'lucide-react';
 import { OperatorBottomNav } from './OperatorBottomNav';
 import { toast } from 'sonner';
-import { getOperatorPendingBookings, approveBookingPayment, rejectBookingPayment } from '../../services/api';
+import { getOperatorPendingBookings, approveBookingPayment, rejectBookingPayment, API_BASE_URL } from '../../services/api';
+
+
 import { ConfirmModal } from '../ui/ConfirmModal';
 
 interface PendingBooking {
@@ -234,11 +236,11 @@ export function OperatorPendingBookings() {
                                     <div className="mb-4">
                                         <p className="text-slate-300 text-sm mb-2">Bukti Transfer:</p>
                                         <div
-                                            onClick={() => setImageModal(`http://localhost:3333${booking.paymentProofImage}`)}
+                                            onClick={() => setImageModal(encodeURI(`${API_BASE_URL}${booking.paymentProofImage}`))}
                                             className="relative cursor-pointer group rounded-2xl overflow-hidden border border-slate-700/50 hover:border-cyan-500/50 transition-all"
                                         >
                                             <img
-                                                src={`http://localhost:3333${booking.paymentProofImage}`}
+                                                src={encodeURI(`${API_BASE_URL}${booking.paymentProofImage}`)}
                                                 alt="Payment Proof"
                                                 className="w-full h-auto max-h-64 object-cover"
                                             />
