@@ -105,7 +105,8 @@ export default class BookingController {
             // Process file upload if bank transfer
             let uploadedFilePath: string | null = null
             if (paymentMethod === 'bank_transfer' && paymentProofImage) {
-                const fileName = `${Date.now()}_${paymentProofImage.clientName}`
+                const sanitizedFileName = paymentProofImage.clientName.replace(/\s+/g, '_')
+                const fileName = `${Date.now()}_${sanitizedFileName}`
                 await paymentProofImage.move('public/uploads/payment-proofs', {
                     name: fileName,
                     overwrite: true,
