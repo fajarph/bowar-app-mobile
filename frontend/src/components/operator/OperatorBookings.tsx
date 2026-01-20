@@ -18,7 +18,8 @@ import { toast } from 'sonner';
 import {
   getOperatorBookings,
   approveBookingPayment,
-  rejectBookingPayment
+  rejectBookingPayment,
+  API_BASE_URL
 } from '../../services/api';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { useEffect } from 'react';
@@ -353,11 +354,11 @@ export function OperatorBookings() {
 
                         {booking.paymentProofImage && (
                           <div
-                            onClick={() => setImageModal(`http://localhost:3333${booking.paymentProofImage}`)}
+                            onClick={() => setImageModal(encodeURI(`${API_BASE_URL}${booking.paymentProofImage}`))}
                             className="relative cursor-pointer group rounded-xl overflow-hidden border border-slate-700/50 hover:border-purple-500/50 transition-all max-w-[200px]"
                           >
                             <img
-                              src={`http://localhost:3333${booking.paymentProofImage}`}
+                              src={encodeURI(`${API_BASE_URL}${booking.paymentProofImage}`)}
                               alt="Payment Proof"
                               className="w-full h-24 object-cover"
                             />
